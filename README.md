@@ -4,9 +4,11 @@
 
 A Helm chart to deploy RegionalDR configuration
 
-This chart is used to serve as the template for Validated Patterns Charts
+This chart provides a Regional DR configuration
 
 ## Notable changes
+
+v0.1.0 - Initial release
 
 ## Values
 
