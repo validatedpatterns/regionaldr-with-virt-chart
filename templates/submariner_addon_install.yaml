@@ -50,10 +50,10 @@ spec:
     gateways: 1
     aws:
       instanceType: {{ $.Values.submariner.instanceType }}
-  {{- if $.Values.submariner.ipsecNatPort }}
+  {{- if eq $.Values.submariner.cableDriver "libreswan" }}
   IPSecNATTPort: {{ $.Values.submariner.ipsecNatPort }}
-  {{- end }}
   NATTEnable: {{ $.Values.submariner.NATTEnable }}
+  {{- end }}
   cableDriver: {{ $.Values.submariner.cableDriver }}
   credentialsSecret:
     name: {{ $cluster.name }}-cluster-aws-creds
