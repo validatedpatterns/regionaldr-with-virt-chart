@@ -22,10 +22,10 @@ clusterDeployments:
   secretRefreshInterval: 90s
 
 submariner:
-  instanceType: c5d.large
+  instanceType: m5.xlarge
   ipsecNatPort: 4500
   NATTEnable: true
-  cableDriver: libreswan
+  cableDriver: vxlan
 
 # Minimal overrides for cluster names, versions, regions (e.g. overrides/values-cluster-names.yaml).
 # Merge override file FIRST so full regionalDR stays here and only clusterOverrides are applied.

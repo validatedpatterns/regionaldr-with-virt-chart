@@ -33,6 +33,8 @@ v0.1.0 - Initial release
 | drpc.pvcSelector.matchExpressions[0].values[0] | string | `"storage"` |  |
 | edgeGitopsVms.chartVersion | string | `"0.2.10"` |  |
 | global.clusterDomain | string | `"cluster.example.com"` |  |
+| global.pattern | string | `"ramendr-starter-kit-hub"` |  |
+| main.clusterGroupName | string | `"resilient"` |  |
 | regionalDR[0].clusters.primary.clusterGroup | string | `"resilient"` |  |
 | regionalDR[0].clusters.primary.install_config.apiVersion | string | `"v1"` |  |
 | regionalDR[0].clusters.primary.install_config.baseDomain | string | `"{{ join \".\" (slice (splitList \".\" $.Values.global.clusterDomain) 1) }}"` |  |
@@ -85,8 +87,8 @@ v0.1.0 - Initial release
 | secretStore.kind | string | `"ClusterSecretStore"` |  |
 | secretStore.name | string | `"vault-backend"` |  |
 | submariner.NATTEnable | bool | `true` |  |
-| submariner.cableDriver | string | `"libreswan"` |  |
-| submariner.instanceType | string | `"c5d.large"` |  |
+| submariner.cableDriver | string | `"vxlan"` |  |
+| submariner.instanceType | string | `"m5.xlarge"` |  |
 | submariner.ipsecNatPort | int | `4500` |  |
 
 ----------------------------------------------
