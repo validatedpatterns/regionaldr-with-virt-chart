@@ -23,7 +23,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: drpc-health-checker
-        image: registry.redhat.io/openshift4/ose-cli:latest
+        image: quay.io/validatedpatterns/utlity-container:latest
         resources:
           requests:
             memory: "128Mi"

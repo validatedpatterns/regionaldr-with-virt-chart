@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: prerequisites-checker
-        image: registry.redhat.io/openshift4/ose-cli:latest
+        image: quay.io/validatedpatterns/utility-container:latest
         env:
         - name: PRIMARY_CLUSTER
           value: {{ include "rdr.primaryClusterName" . | quote }}
