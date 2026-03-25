@@ -55,8 +55,8 @@
             )
           }}
 
-    # Healthy: stop polling conditions/PVC/objects; disable Argo CD sync and exit.
-    - name: DRPC healthy — finish without further status polling
+    # Healthy: stop polling conditions/PVC/objects (Argo CD sync runs once after the loop in main.yml).
+    - name: DRPC healthy — validation complete for this attempt
       when: drpc_is_healthy | bool
       block:
         - name: Report DRPC healthy
@@ -66,16 +66,9 @@
               healthy={{ drpc_is_healthy }} (from_conditions={{ drpc_healthy_from_conditions | default(false) }}) —
               skipping condition/PVC/object checks.
 
-        - name: Disable Argo CD automated sync
-          ansible.builtin.include_tasks: disable_argocd_sync.yml
-
-        - name: Mark DRPC workflow complete
+        - name: Mark DRPC validation complete
           ansible.builtin.set_fact:
             drpc_all_passed: true
-
-        # Avoid relying on loop `when` re-evaluation across include_tasks iterations (stops extra attempts).
-        - name: Stop playbook after successful DRPC check
-          ansible.builtin.meta: end_host
 
     - name: DRPC not yet healthy — recipe recovery, conditions, PVC, kube objects
       when: not (drpc_is_healthy | bool)
@@ -252,15 +245,9 @@
                   - kube_obj_positive | bool
                 quiet: true
 
-        - name: Disable Argo CD automated sync
-          ansible.builtin.include_tasks: disable_argocd_sync.yml
-
-        - name: Mark DRPC workflow complete
+        - name: Mark DRPC validation complete
           ansible.builtin.set_fact:
             drpc_all_passed: true
-
-        - name: Stop playbook after successful DRPC check
-          ansible.builtin.meta: end_host
 
   rescue:
     - name: Log DRPC attempt failure

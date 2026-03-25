@@ -1,5 +1,5 @@
 ---
-# DRPC health + disable Argo CD automated sync when healthy.
+# DRPC health validation (retry loop) + one-time disable of Argo CD automated sync after validation succeeds.
 # Wait criteria: drpc_max_attempts × drpc_retry_delay_seconds (default 60 × 60s = 1h).
 #
 # If DRPC phase is not in drpc_healthy_phases (Deployed, FailedOver, Relocated by default), status JSON
