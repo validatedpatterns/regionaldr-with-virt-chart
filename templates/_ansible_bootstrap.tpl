@@ -25,6 +25,6 @@ cd "$STAGE"
 {{- define "rdr.ansibleBootstrap" -}}
 {{ include "rdr.ansibleStageOnly" . }}
 export ANSIBLE_LOCAL_TMP=/tmp/ansible-tmp
-python3 -m pip install --user -q 'ansible-core>=2.15,<2.17'
+python3 -m pip install --user -q --no-warn-script-location 'ansible-core>=2.15,<2.17'
 export PATH="/tmp/.local/bin:$PATH"
 {{- end }}

@@ -1,11 +1,11 @@
 ---
 # DRPC health validation (retry loop) + one-time disable of Argo CD automated sync after validation succeeds.
-# Wait criteria: drpc_max_attempts × drpc_retry_delay_seconds (default 60 × 60s = 1h).
+# Wait budget: drpc_max_attempts × drpc_retry_delay_seconds between failed attempts (defaults 30 × 30s ≈ 15m pauses).
 #
 # If DRPC phase is not in drpc_healthy_phases (Deployed, FailedOver, Relocated by default), status JSON
 # contains drpc_recipe_failure_phrase (default: "recipe reconcile failed"), and the object is at most
 # drpc_recipe_failure_max_age_minutes old (default 15), the role deletes the DRPC, waits until it is gone,
-# patches the Argo CD Application to sync, and retries on the next attempt. Healthy-phase DRPCs skip this.
+# annotates the Argo CD Application for hard refresh (not an operation sync), and retries on the next attempt.
 - name: DRPC health check and Argo CD sync disable
   hosts: localhost
   gather_facts: false

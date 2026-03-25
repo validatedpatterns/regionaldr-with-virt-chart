@@ -1,0 +1,28 @@
+---
+- name: Next DRPC validation attempt number
+  ansible.builtin.set_fact:
+    drpc_attempt_num: "{{ drpc_attempt_num | int + 1 }}"
+
+- name: Run single DRPC validation attempt
+  block:
+    - name: Include attempt body
+      ansible.builtin.include_tasks: attempt.yml
+  rescue:
+    - name: Log attempt failure (retry if attempts remain)
+      ansible.builtin.debug:
+        msg: >-
+          DRPC attempt {{ drpc_attempt_num }}/{{ drpc_max_attempts }} failed — waiting
+          {{ drpc_retry_delay_seconds }}s before next try if any remain.
+
+- name: Wait before next DRPC validation attempt
+  ansible.builtin.pause:
+    seconds: "{{ drpc_retry_delay_seconds | int }}"
+  when:
+    - not (drpc_all_passed | default(false))
+    - drpc_attempt_num | int < drpc_max_attempts | int
+
+- name: Continue DRPC validation
+  ansible.builtin.include_tasks: drpc_validation_loop.yml
+  when:
+    - not (drpc_all_passed | default(false))
+    - drpc_attempt_num | int < drpc_max_attempts | int

@@ -69,6 +69,12 @@ drpc:
         values:
           - storage
   preferredCluster: ocp-primary  # default; override in values-cluster-names or values
+  # PostSync job drpc-health-check-argocd-sync-disable (ansible drpc_health_check role).
+  healthCheck:
+    maxAttempts: 30
+    retryDelaySeconds: 30
+    deleteWaitRetries: 24
+    deleteWaitDelay: 5
 
 ansible:
   containerImage: quay.io/validatedpatterns/utility-container:latest

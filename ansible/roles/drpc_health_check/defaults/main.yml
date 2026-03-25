@@ -4,8 +4,9 @@ drpc_name: gitops-vm-protection
 protected_namespace: gitops-vms
 argocd_app_name: regional-dr
 argocd_app_namespace: ramendr-starter-kit-hub
-drpc_max_attempts: 60
-drpc_retry_delay_seconds: 60
+# Worst-case wait ≈ max_attempts × retry_delay (plus attempt runtime). Tune via Helm drpc.healthCheck.*.
+drpc_max_attempts: 30
+drpc_retry_delay_seconds: 30
 
 # Terminal phases where DR is considered healthy — stop polling conditions/PVC/kube checks.
 # Ramen uses Deployed after initial deploy; FailedOver / Relocated after completed DR actions.
@@ -16,8 +17,9 @@ drpc_healthy_phases:
 
 # Recipe reconcile failures usually appear soon after create; only auto-recover in this window (minutes).
 drpc_recipe_failure_max_age_minutes: 15
-# When DRPC status contains this phrase (case-insensitive, any JSON field), may delete DRPC and re-sync Argo CD.
+# When DRPC status contains this phrase (case-insensitive, any JSON field), may delete DRPC and annotate Argo CD for hard refresh.
 drpc_recipe_failure_phrase: recipe reconcile failed
 drpc_recipe_failure_recovery_enabled: true
-drpc_delete_wait_retries: 60
+# Max wait for DRPC delete: retries × delay (default 24×5s ≈ 2m).
+drpc_delete_wait_retries: 24
 drpc_delete_wait_delay: 5

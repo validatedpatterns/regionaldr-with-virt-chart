@@ -1,12 +1,12 @@
 ---
-# Retry loop: DRPC validation only (no Argo CD). Argo automated-sync disable runs once after validation succeeds.
-- name: DRPC validation attempts
-  ansible.builtin.include_tasks: attempt.yml
-  loop: "{{ range(1, drpc_max_attempts | int + 1) | list }}"
-  loop_control:
-    loop_var: drpc_attempt_num
-    label: "attempt {{ drpc_attempt_num }}/{{ drpc_max_attempts }}"
-  when: not (drpc_all_passed | default(false))
+# include_tasks cannot use until/retries (TaskInclude). Use a tail-recursive driver so we only load
+# attempt.yml once per try instead of scheduling N loop iterations up front.
+- name: Initialize DRPC attempt counter
+  ansible.builtin.set_fact:
+    drpc_attempt_num: 0
+
+- name: DRPC validation (repeat until healthy or max attempts)
+  ansible.builtin.include_tasks: drpc_validation_loop.yml
 
 - name: Disable Argo CD automated sync (once, after DRPC is healthy)
   ansible.builtin.include_tasks: disable_argocd_sync.yml

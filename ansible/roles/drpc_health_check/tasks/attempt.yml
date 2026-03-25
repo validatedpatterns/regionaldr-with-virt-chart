@@ -6,7 +6,6 @@
     kube_obj_positive: false
 
 - name: DRPC attempt {{ drpc_attempt_num }}
-  when: not (drpc_all_passed | default(false))
   block:
     - name: Fetch DRPC
       ansible.builtin.command:
@@ -114,7 +113,7 @@
                 and (drpc_age_minutes | int <= drpc_recipe_failure_max_age_minutes | int)
               }}
 
-        - name: Recover from early DRPC recipe failure — delete, wait, Argo CD sync
+        - name: Recover from early DRPC recipe failure — delete, wait, Argo CD hard refresh
           when: drpc_recipe_recovery_should_run | bool
           block:
             - name: Run recipe failure recovery
@@ -122,13 +121,13 @@
             - name: End attempt after recovery so outer loop can re-check recreated DRPC
               ansible.builtin.fail:
                 msg: >-
-                  DRPC recipe failure recovery finished (delete + Argo CD sync). Next attempt will re-fetch DRPC.
+                  DRPC recipe failure recovery finished (delete + Argo CD hard refresh). Next attempt will re-fetch DRPC.
 
         - name: Note recipe failure outside auto-recovery window (enabled but too old to auto-delete)
           ansible.builtin.debug:
             msg: >-
               DRPC shows '{{ drpc_recipe_failure_phrase }}' and phase is not healthy ({{ drpc_phase }}); age {{ drpc_age_minutes }}m
-              exceeds {{ drpc_recipe_failure_max_age_minutes }}m — skipping delete/Argo re-sync; continuing checks.
+              exceeds {{ drpc_recipe_failure_max_age_minutes }}m — skipping delete/refresh; continuing checks.
           when:
             - drpc_recipe_failure_detected | bool
             - drpc_recipe_failure_recovery_enabled | bool
@@ -248,15 +247,3 @@
         - name: Mark DRPC validation complete
           ansible.builtin.set_fact:
             drpc_all_passed: true
-
-  rescue:
-    - name: Log DRPC attempt failure
-      ansible.builtin.debug:
-        msg: >-
-          DRPC attempt {{ drpc_attempt_num }} failed — retrying after
-          {{ drpc_retry_delay_seconds }}s if attempts remain.
-
-    - name: Wait before next DRPC attempt
-      ansible.builtin.pause:
-        seconds: "{{ drpc_retry_delay_seconds | int }}"
-      when: drpc_attempt_num | int < drpc_max_attempts | int
