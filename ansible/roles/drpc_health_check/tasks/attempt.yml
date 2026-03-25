@@ -25,7 +25,7 @@
     - name: Parse DRPC document
       ansible.builtin.set_fact:
         drpc_doc: "{{ drpc_get.stdout | from_json }}"
-        drpc_phase: "{{ (drpc_get.stdout | from_json).status.phase | default('', true) }}"
+        drpc_phase: "{{ ((drpc_get.stdout | from_json).status.phase | default('', true)) | trim }}"
         drpc_conditions: "{{ (drpc_get.stdout | from_json).status.conditions | default([]) }}"
 
     - name: Record whether DRPC phase is a terminal healthy state
