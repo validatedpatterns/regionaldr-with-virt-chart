@@ -1,0 +1,10 @@
+---
+# Waits are implemented inside the role script (inner 120×60s, infinite outer), matching the original shell.
+- name: ODF DR prerequisites
+  hosts: localhost
+  gather_facts: false
+  vars:
+    primary_cluster: "{{ lookup('env', 'PRIMARY_CLUSTER') | default('ocp-primary', true) }}"
+    secondary_cluster: "{{ lookup('env', 'SECONDARY_CLUSTER') | default('ocp-secondary', true) }}"
+  roles:
+    - odf_dr_prerequisites

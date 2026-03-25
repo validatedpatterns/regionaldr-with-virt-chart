@@ -1,6 +1,6 @@
 apiVersion: v2
-description: A Helm chart to deploy RegionalDR configuration
+description: A Helm chart to deploy RegionalDR configuration including virtualization
 keywords:
 - pattern
-name: hub-apps
+name: regionaldr-with-virt
 version: 0.0.1

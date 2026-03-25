@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: regionaldr-ansible
+  namespace: open-cluster-management
+  labels:
+    app.kubernetes.io/name: regionaldr-ansible
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: Prune=false
+data:
+{{- range $path, $content := .Files.Glob "ansible/**" }}
+  {{- $key := $path | trimPrefix "ansible/" | replace "/" "__" }}
+  {{ $key }}: |
+{{ $content | toString | nindent 4 }}
+{{- end }}

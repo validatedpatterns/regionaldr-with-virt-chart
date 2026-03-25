@@ -1,0 +1,10 @@
+---
+- name: Edge GitOps VMs deploy
+  hosts: localhost
+  gather_facts: false
+  vars:
+    primary_cluster: "{{ lookup('env', 'PRIMARY_CLUSTER') | default('ocp-primary', true) }}"
+    secondary_cluster: "{{ lookup('env', 'SECONDARY_CLUSTER') | default('ocp-secondary', true) }}"
+    helm_chart_version: "{{ lookup('env', 'HELM_CHART_VERSION') | default('0.2.10', true) }}"
+  roles:
+    - edge_gitops_vms_deploy

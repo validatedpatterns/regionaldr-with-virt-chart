@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: edge-gitops-vms
     app.kubernetes.io/component: deployment
   annotations:
-    argocd.argoproj.io/sync-wave: "10"
+    argocd.argoproj.io/sync-wave: "11"
 data:
   values-egv-dr.yaml: |
 {{ .Values | toYaml | indent 4 }}
@@ -22,7 +22,7 @@ metadata:
     app.kubernetes.io/name: edge-gitops-vms
     app.kubernetes.io/component: deployment
   annotations:
-    argocd.argoproj.io/sync-wave: "10"
+    argocd.argoproj.io/sync-wave: "11"
     argocd.argoproj.io/sync-options: Prune=false
     argocd.argoproj.io/compare-options: IgnoreExtraneous
     argocd.argoproj.io/hook: "PostSync"
@@ -36,7 +36,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: edge-gitops-vms-deploy
-        image: quay.io/validatedpatterns/utility-container:latest
+        image: {{ $.Values.ansible.containerImage }}
         resources:
           requests:
             memory: "256Mi"
@@ -48,14 +48,17 @@ spec:
         - /bin/bash
         - -c
         - |
-          # Copy values file from ConfigMap
-          mkdir -p /tmp/edge-gitops-vms
-          cp /tmp/values/values-egv-dr.yaml /tmp/edge-gitops-vms/values-egv-dr.yaml
-          
-{{ .Files.Get "scripts/edge-gitops-vms-deploy.sh" | indent 10 }}
+{{ include "rdr.ansibleBootstrap" . | indent 10 }}
+            ansible-playbook -i inventory/hosts playbooks/edge_gitops_vms_deploy.yml \
+              -e "primary_cluster=${PRIMARY_CLUSTER}" \
+              -e "secondary_cluster=${SECONDARY_CLUSTER}" \
+              -e "helm_chart_version=${HELM_CHART_VERSION:-0.2.10}"
         volumeMounts:
         - name: values
           mountPath: /tmp/values
+          readOnly: true
+        - name: ansible
+          mountPath: /ansible-cm
           readOnly: true
         env:
         - name: KUBECONFIG
@@ -70,5 +73,6 @@ spec:
       - name: values
         configMap:
           name: edge-gitops-vms-values
-      restartPolicy: Never
-
+      - name: ansible
+        configMap:
+          name: regionaldr-ansible

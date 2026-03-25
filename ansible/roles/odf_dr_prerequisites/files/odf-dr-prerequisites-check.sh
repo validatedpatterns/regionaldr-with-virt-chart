@@ -1,4 +1,9 @@
 #!/bin/bash
+# Re-exec with line-buffered stdio so Kubernetes pod logs update during long runs (pipes are fully buffered by default).
+if [[ -z "${ODF_PREREQ_LINEBUF:-}" ]] && command -v stdbuf >/dev/null 2>&1; then
+  export ODF_PREREQ_LINEBUF=1
+  exec stdbuf -oL -eL bash "$0" "$@"
+fi
 set -euo pipefail
 
 echo "Starting ODF DR prerequisites check..."
@@ -13,6 +18,28 @@ SLEEP_INTERVAL=60  # 1 minute between checks
 
 # Create kubeconfig directory
 mkdir -p "$KUBECONFIG_DIR"
+
+# Chunked sleep so kubectl logs -f show progress between attempts (not a single silent minute)
+progress_sleep() {
+  local total=${1:-60}
+  local step=15
+  local elapsed=0
+  echo "⏳ Pausing ${total}s before continuing..."
+  while (( elapsed < total )); do
+    local chunk=$step
+    (( elapsed + chunk > total )) && chunk=$((total - elapsed))
+    sleep "$chunk"
+    elapsed=$((elapsed + chunk))
+    (( elapsed < total )) && echo "   ... ${elapsed}s / ${total}s elapsed (still in wait)"
+  done
+}
+
+# Record failures for end-of-attempt summary (pod logs / Ansible output)
+report_check_failure() {
+  local msg="$1"
+  echo "❌ $msg"
+  failures_this_attempt+=("$msg")
+}
 
 # Function to check if a condition is met
 check_condition() {
@@ -39,14 +66,16 @@ check_odf_health() {
   
   # Check if ODF is installed
   if ! oc --kubeconfig="$kubeconfig" get crd storageclusters.ocs.openshift.io &>/dev/null; then
-    echo "ODF CRD not found on $cluster"
+    report_check_failure "ODF health ($cluster): CRD storageclusters.ocs.openshift.io not found (ODF/OCS not installed or API unreachable)"
     return 1
   fi
   
   # Check ODF storage cluster status
   local storage_cluster_status=$(oc --kubeconfig="$kubeconfig" get storagecluster -n openshift-storage -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
   if [[ "$storage_cluster_status" != "Ready" ]]; then
-    echo "ODF storage cluster status on $cluster: $storage_cluster_status"
+    local sc_count
+    sc_count=$(oc --kubeconfig="$kubeconfig" get storagecluster -n openshift-storage --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    report_check_failure "ODF health ($cluster): StorageCluster phase is '$storage_cluster_status' (expected Ready); count in openshift-storage: ${sc_count:-0}"
     return 1
   fi
   
@@ -54,7 +83,7 @@ check_odf_health() {
   local odf_operator_status=$(oc --kubeconfig="$kubeconfig" get pods -n openshift-storage -l app.kubernetes.io/name=odf-operator --no-headers 2>/dev/null | grep -c "Running" || echo "0")
   odf_operator_status=$(echo "$odf_operator_status" | tr -d ' \n')
   if [[ $odf_operator_status -eq 0 ]]; then
-    echo "ODF operator not running on $cluster"
+    report_check_failure "ODF health ($cluster): no Running pods with label app.kubernetes.io/name=odf-operator in openshift-storage"
     return 1
   fi
   
@@ -71,14 +100,14 @@ check_s3_service_health() {
   
   # Check if openshift-storage namespace exists
   if ! oc --kubeconfig="$kubeconfig" get namespace openshift-storage &>/dev/null; then
-    echo "openshift-storage namespace not found on $cluster"
+    report_check_failure "S3/NooBaa ($cluster): namespace openshift-storage does not exist"
     return 1
   fi
   
   # Check for NooBaa (Object Storage) - this provides S3 service
   # Check if NooBaa CRD exists
   if ! oc --kubeconfig="$kubeconfig" get crd noobaas.noobaa.io &>/dev/null; then
-    echo "NooBaa CRD not found on $cluster - S3 service may not be available"
+    report_check_failure "S3/NooBaa ($cluster): CRD noobaas.noobaa.io not found"
     return 1
   fi
   
@@ -86,7 +115,7 @@ check_s3_service_health() {
   local noobaa_system=$(oc --kubeconfig="$kubeconfig" get noobaa -n openshift-storage -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
   
   if [[ -z "$noobaa_system" ]]; then
-    echo "NooBaa system not found in openshift-storage namespace on $cluster"
+    report_check_failure "S3/NooBaa ($cluster): no NooBaa CR in openshift-storage"
     return 1
   fi
   
@@ -99,7 +128,7 @@ check_s3_service_health() {
   echo "  NooBaa ready: $noobaa_ready"
   
   if [[ "$noobaa_phase" != "Ready" ]] && [[ "$noobaa_ready" != "true" ]]; then
-    echo "NooBaa system is not ready on $cluster (phase: $noobaa_phase, ready: $noobaa_ready)"
+    report_check_failure "S3/NooBaa ($cluster): NooBaa '$noobaa_system' not ready (phase=$noobaa_phase, status.ready=$noobaa_ready)"
     return 1
   fi
   
@@ -134,6 +163,7 @@ check_s3_service_health() {
     echo "  ⚠️  NooBaa operator not found on $cluster"
     # Only fail if NooBaa is not Ready AND operator not found
     if [[ "$noobaa_phase" != "Ready" ]]; then
+      report_check_failure "S3/NooBaa ($cluster): NooBaa operator pods not found and phase is not Ready (phase=$noobaa_phase)"
       return 1
     fi
   else
@@ -158,7 +188,7 @@ check_s3_service_health() {
     echo "  NooBaa core pods not found by label/name, but NooBaa is Ready - S3 service likely available"
     # Don't fail if NooBaa is Ready - the core might be managed differently or have different labels
   elif [[ $noobaa_core_pods -eq 0 ]]; then
-    echo "  ❌ NooBaa core pods not running on $cluster - S3 service unavailable"
+    report_check_failure "S3/NooBaa ($cluster): no Running NooBaa core pods and NooBaa phase is not Ready (phase=$noobaa_phase)"
     return 1
   else
     echo "  ✅ NooBaa core pods running: $noobaa_core_pods"
@@ -177,7 +207,7 @@ check_s3_service_health() {
     # Check if service has endpoints
     local service_endpoints=$(oc --kubeconfig="$kubeconfig" get endpoints "$s3_service" -n openshift-storage -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || echo "")
     if [[ -z "$service_endpoints" ]]; then
-      echo "  ⚠️  S3 service $s3_service has no endpoints"
+      report_check_failure "S3/NooBaa ($cluster): Service '$s3_service' in openshift-storage has no endpoints"
       return 1
     else
       echo "  ✅ S3 service $s3_service has endpoints"
@@ -205,7 +235,7 @@ check_s3_service_health() {
     done <<< "$noobaa_conditions"
     
     if [[ "$has_error" == "true" ]]; then
-      echo "NooBaa has critical error conditions on $cluster"
+      report_check_failure "S3/NooBaa ($cluster): NooBaa '$noobaa_system' has critical conditions (Available/Ready reported False or Unknown); see condition lines above"
       return 1
     fi
   fi
@@ -223,7 +253,7 @@ check_ca_configuration() {
   
   # Check if cluster-proxy-ca-bundle ConfigMap exists
   if ! oc --kubeconfig="$kubeconfig" get configmap cluster-proxy-ca-bundle -n openshift-config &>/dev/null; then
-    echo "cluster-proxy-ca-bundle ConfigMap not found on $cluster"
+    report_check_failure "CA config ($cluster): ConfigMap cluster-proxy-ca-bundle not found in openshift-config"
     return 1
   fi
   
@@ -231,14 +261,14 @@ check_ca_configuration() {
   local ca_bundle_size=$(oc --kubeconfig="$kubeconfig" get configmap cluster-proxy-ca-bundle -n openshift-config -o jsonpath='{.data.ca-bundle\.crt}' 2>/dev/null | wc -c || echo "0")
   ca_bundle_size=$(echo "$ca_bundle_size" | tr -d ' \n')
   if [[ $ca_bundle_size -lt 100 ]]; then
-    echo "CA bundle is too small or empty on $cluster (size: $ca_bundle_size)"
+    report_check_failure "CA config ($cluster): cluster-proxy-ca-bundle data ca-bundle.crt too small or empty (bytes: $ca_bundle_size)"
     return 1
   fi
   
   # Check if Proxy object is configured
   local proxy_trusted_ca=$(oc --kubeconfig="$kubeconfig" get proxy cluster -o jsonpath='{.spec.trustedCA.name}' 2>/dev/null || echo "")
   if [[ "$proxy_trusted_ca" != "cluster-proxy-ca-bundle" ]]; then
-    echo "Proxy trustedCA not configured correctly on $cluster (current: $proxy_trusted_ca)"
+    report_check_failure "CA config ($cluster): Proxy cluster spec.trustedCA.name is '$proxy_trusted_ca' (expected cluster-proxy-ca-bundle)"
     return 1
   fi
   
@@ -261,17 +291,17 @@ check_ca_material_completeness() {
   
   # Check if all CA bundles exist and have reasonable size
   if [[ -z "$hub_ca_bundle" || ${#hub_ca_bundle} -lt 100 ]]; then
-    echo "Hub cluster CA bundle is missing or too small"
+    report_check_failure "CA material: hub (local-cluster) bundle missing or too small (${#hub_ca_bundle} chars)"
     return 1
   fi
   
   if [[ -z "$primary_ca_bundle" || ${#primary_ca_bundle} -lt 100 ]]; then
-    echo "Primary cluster CA bundle is missing or too small"
+    report_check_failure "CA material: primary ($PRIMARY_CLUSTER) bundle missing or too small (${#primary_ca_bundle} chars)"
     return 1
   fi
   
   if [[ -z "$secondary_ca_bundle" || ${#secondary_ca_bundle} -lt 100 ]]; then
-    echo "Secondary cluster CA bundle is missing or too small"
+    report_check_failure "CA material: secondary ($SECONDARY_CLUSTER) bundle missing or too small (${#secondary_ca_bundle} chars)"
     return 1
   fi
   
@@ -286,66 +316,66 @@ check_ca_material_completeness() {
   
   # Look for hub cluster certificates
   if [[ "$hub_ca_bundle" != *"# CA from hub-ca"* ]]; then
-    echo "Hub cluster CA bundle missing hub-ca certificate"
     echo "Available markers in hub CA bundle:"
     echo "$hub_ca_bundle" | grep "^# CA from" || echo "No CA markers found"
+    report_check_failure "CA material: hub bundle missing marker '# CA from hub-ca'"
     return 1
   fi
   
   if [[ "$primary_ca_bundle" != *"# CA from hub-ca"* ]]; then
-    echo "Primary cluster CA bundle missing hub-ca certificate"
     echo "Available markers in primary CA bundle:"
     echo "$primary_ca_bundle" | grep "^# CA from" || echo "No CA markers found"
+    report_check_failure "CA material: primary bundle missing marker '# CA from hub-ca'"
     return 1
   fi
   
   if [[ "$secondary_ca_bundle" != *"# CA from hub-ca"* ]]; then
-    echo "Secondary cluster CA bundle missing hub-ca certificate"
     echo "Available markers in secondary CA bundle:"
     echo "$secondary_ca_bundle" | grep "^# CA from" || echo "No CA markers found"
+    report_check_failure "CA material: secondary bundle missing marker '# CA from hub-ca'"
     return 1
   fi
   
   # Look for primary cluster certificates (marker from odf-ssl-certificate-extraction.sh)
   if [[ "$hub_ca_bundle" != *"# CA from ${PRIMARY_CLUSTER}-ca"* ]]; then
-    echo "Hub cluster CA bundle missing ${PRIMARY_CLUSTER}-ca certificate"
+    report_check_failure "CA material: hub bundle missing marker '# CA from ${PRIMARY_CLUSTER}-ca'"
     return 1
   fi
   
   if [[ "$primary_ca_bundle" != *"# CA from ${PRIMARY_CLUSTER}-ca"* ]]; then
-    echo "Primary cluster CA bundle missing ${PRIMARY_CLUSTER}-ca certificate"
+    report_check_failure "CA material: primary bundle missing marker '# CA from ${PRIMARY_CLUSTER}-ca'"
     return 1
   fi
   
   if [[ "$secondary_ca_bundle" != *"# CA from ${PRIMARY_CLUSTER}-ca"* ]]; then
-    echo "Secondary cluster CA bundle missing ${PRIMARY_CLUSTER}-ca certificate"
+    report_check_failure "CA material: secondary bundle missing marker '# CA from ${PRIMARY_CLUSTER}-ca'"
     return 1
   fi
   
   # Look for secondary cluster certificates
   if [[ "$hub_ca_bundle" != *"# CA from ${SECONDARY_CLUSTER}-ca"* ]]; then
-    echo "Hub cluster CA bundle missing ${SECONDARY_CLUSTER}-ca certificate"
+    report_check_failure "CA material: hub bundle missing marker '# CA from ${SECONDARY_CLUSTER}-ca'"
     return 1
   fi
   
   if [[ "$primary_ca_bundle" != *"# CA from ${SECONDARY_CLUSTER}-ca"* ]]; then
-    echo "Primary cluster CA bundle missing ${SECONDARY_CLUSTER}-ca certificate"
+    report_check_failure "CA material: primary bundle missing marker '# CA from ${SECONDARY_CLUSTER}-ca'"
     return 1
   fi
   
   if [[ "$secondary_ca_bundle" != *"# CA from ${SECONDARY_CLUSTER}-ca"* ]]; then
-    echo "Secondary cluster CA bundle missing ${SECONDARY_CLUSTER}-ca certificate"
+    report_check_failure "CA material: secondary bundle missing marker '# CA from ${SECONDARY_CLUSTER}-ca'"
     return 1
   fi
   
   # Check that all CA bundles are identical (they should contain the same combined certificate data)
   if [[ "$hub_ca_bundle" != "$primary_ca_bundle" ]]; then
-    echo "Hub and Primary cluster CA bundles are not identical"
+    report_check_failure "CA material: hub and primary cluster-proxy-ca-bundle contents differ (must be identical after trust sync)"
     return 1
   fi
   
   if [[ "$hub_ca_bundle" != "$secondary_ca_bundle" ]]; then
-    echo "Hub and Secondary cluster CA bundles are not identical"
+    report_check_failure "CA material: hub and secondary cluster-proxy-ca-bundle contents differ (must be identical after trust sync)"
     return 1
   fi
   
@@ -376,7 +406,7 @@ download_kubeconfig() {
   local kubeconfig_secret=$(oc get secret -n "$cluster" -o name | grep -E "(admin-kubeconfig|kubeconfig)" | head -1)
   
   if [[ -z "$kubeconfig_secret" ]]; then
-    echo "No kubeconfig secret found for cluster $cluster"
+    report_check_failure "Kubeconfig ($cluster): no secret matching admin-kubeconfig|kubeconfig in namespace $cluster (is the ManagedCluster joined?)"
     return 1
   fi
   
@@ -394,7 +424,7 @@ download_kubeconfig() {
   fi
   
   if [[ -z "$kubeconfig_data" ]]; then
-    echo "Could not extract kubeconfig data for cluster $cluster"
+    report_check_failure "Kubeconfig ($cluster): secret $kubeconfig_secret has no usable .data.kubeconfig or .data.raw-kubeconfig"
     return 1
   fi
   
@@ -406,7 +436,7 @@ download_kubeconfig() {
     echo "Kubeconfig downloaded and validated for $cluster"
     return 0
   else
-    echo "Kubeconfig for $cluster is invalid or cluster is unreachable"
+    report_check_failure "Kubeconfig ($cluster): wrote file but 'oc get nodes' failed (invalid kubeconfig, network, or API not ready)"
     return 1
   fi
 }
@@ -418,22 +448,19 @@ while true; do
   
   while [[ $attempt -le $MAX_ATTEMPTS ]]; do
     echo "=== ODF DR Prerequisites Check Attempt $attempt/$MAX_ATTEMPTS ==="
-    
+    failures_this_attempt=()
     all_checks_passed=true
     
-    # Download kubeconfigs
+    # Download kubeconfigs (report_check_failure is called inside download_kubeconfig on error)
     if ! download_kubeconfig "$HUB_CLUSTER"; then
-      echo "Failed to download kubeconfig for $HUB_CLUSTER"
       all_checks_passed=false
     fi
     
     if ! download_kubeconfig "$PRIMARY_CLUSTER"; then
-      echo "Failed to download kubeconfig for $PRIMARY_CLUSTER"
       all_checks_passed=false
     fi
     
     if ! download_kubeconfig "$SECONDARY_CLUSTER"; then
-      echo "Failed to download kubeconfig for $SECONDARY_CLUSTER"
       all_checks_passed=false
     fi
     
@@ -483,8 +510,21 @@ while true; do
       echo "🎉 All ODF DR prerequisites are met! Proceeding with Submariner prerequisites..."
       exit 0
     else
+      echo ""
+      echo "══════════════════════════════════════════════════════════════════════"
+      echo "ODF DR prerequisites — attempt $attempt/$MAX_ATTEMPTS FAILED — summary"
+      echo "══════════════════════════════════════════════════════════════════════"
+      if [[ ${#failures_this_attempt[@]} -eq 0 ]]; then
+        echo "  (No failure lines were recorded; see detailed messages above this block.)"
+      else
+        for i in "${!failures_this_attempt[@]}"; do
+          echo "  $((i + 1)). ${failures_this_attempt[$i]}"
+        done
+      fi
+      echo "══════════════════════════════════════════════════════════════════════"
+      echo ""
       echo "❌ Some ODF DR prerequisites are not met. Waiting $SLEEP_INTERVAL seconds before retry..."
-      sleep $SLEEP_INTERVAL
+      progress_sleep "$SLEEP_INTERVAL"
       ((attempt++))
     fi
   done
@@ -500,6 +540,6 @@ while true; do
   echo "🔄 Restarting ODF DR prerequisites check..."
   # Reset attempt counter and continue
   attempt=1
-  sleep $SLEEP_INTERVAL
+  progress_sleep "$SLEEP_INTERVAL"
 done  # End of infinite retry loop
 

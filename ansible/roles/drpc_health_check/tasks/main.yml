@@ -1,0 +1,20 @@
+---
+# include_tasks cannot use until/retries (TaskInclude). Use a tail-recursive driver so we only load
+# attempt.yml once per try instead of scheduling N loop iterations up front.
+- name: Initialize DRPC attempt counter
+  ansible.builtin.set_fact:
+    drpc_attempt_num: 0
+
+- name: DRPC validation (repeat until healthy or max attempts)
+  ansible.builtin.include_tasks: drpc_validation_loop.yml
+
+- name: Disable Argo CD automated sync (once, after DRPC is healthy)
+  ansible.builtin.include_tasks: disable_argocd_sync.yml
+  when: drpc_all_passed | default(false)
+
+- name: Fail after exhausting DRPC attempts
+  ansible.builtin.fail:
+    msg: >-
+      DRPC health check failed after {{ drpc_max_attempts }} attempts
+      ({{ drpc_retry_delay_seconds }}s between tries).
+  when: not (drpc_all_passed | default(false))

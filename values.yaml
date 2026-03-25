@@ -10,7 +10,7 @@ main:
 
 # Edge GitOps VMs deployment (script and helm chart)
 edgeGitopsVms:
-  chartVersion: "0.2.10"
+  chartVersion: "0.3.0"
 
 secretStore:
   name: vault-backend
@@ -69,6 +69,21 @@ drpc:
         values:
           - storage
   preferredCluster: ocp-primary  # default; override in values-cluster-names or values
+  # PostSync job drpc-health-check-argocd-sync-disable (ansible drpc_health_check role).
+  healthCheck:
+    maxAttempts: 30
+    retryDelaySeconds: 30
+    deleteWaitRetries: 24
+    deleteWaitDelay: 5
+
+ansible:
+  containerImage: quay.io/validatedpatterns/utility-container:latest
+
+# Post-sync job odf-ramen-trusted-ca (wave 9): CA from hub cluster-proxy-ca-bundle; waits for Ramen s3StoreProfiles.
+odfRamenTrustedCa:
+  ramenS3WaitSeconds: 3600
+  trustedCaWaitSeconds: 3600
+  pollInterval: 15
 
 regionalDR:
   - name: resilient # Matches with ClusterSet

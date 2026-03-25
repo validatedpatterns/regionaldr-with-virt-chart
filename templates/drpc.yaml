@@ -5,7 +5,7 @@ kind: DRPlacementControl
 metadata:
   annotations:
     drplacementcontrol.ramendr.openshift.io/app-namespace: {{ $drpc.namespace | default "openshift-dr-ops" }}
-    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-wave: "10"
   labels:
     cluster.open-cluster-management.io/backup: ramen
   name: {{ $drpc.name | default "gitops-vm-protection" }}

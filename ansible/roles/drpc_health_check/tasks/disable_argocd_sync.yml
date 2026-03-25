@@ -1,0 +1,98 @@
+---
+# Never fail the play here: DRPC can already be healthy while the Application name/NS is wrong or RBAC denies get.
+- name: Look up Argo CD Application
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - applications.argoproj.io
+      - "{{ argocd_app_name }}"
+      - -n
+      - "{{ argocd_app_namespace }}"
+  register: drpc_argocd_app_get
+  changed_when: false
+  failed_when: false
+
+- name: Skip automated sync disable when Application is absent or not readable
+  ansible.builtin.debug:
+    msg: >-
+      Skipping Argo CD automated sync disable — could not read Application
+      {{ argocd_app_name }}/{{ argocd_app_namespace }} (rc={{ drpc_argocd_app_get.rc }}).
+  when: drpc_argocd_app_get.rc != 0
+
+- name: Adjust Argo CD automated sync when Application exists
+  when: drpc_argocd_app_get.rc == 0
+  block:
+    - name: Read spec.syncPolicy
+      ansible.builtin.command:
+        argv:
+          - oc
+          - get
+          - applications.argoproj.io
+          - "{{ argocd_app_name }}"
+          - -n
+          - "{{ argocd_app_namespace }}"
+          - -o
+          - jsonpath={.spec.syncPolicy}
+      register: sync_policy_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Record whether syncPolicy is set
+      ansible.builtin.set_fact:
+        drpc_sync_policy_present: >-
+          {{ (sync_policy_raw.stdout | length > 0) and (sync_policy_raw.stdout != 'null') }}
+
+    - name: Read spec.syncPolicy.automated
+      when: drpc_sync_policy_present | bool
+      ansible.builtin.command:
+        argv:
+          - oc
+          - get
+          - applications.argoproj.io
+          - "{{ argocd_app_name }}"
+          - -n
+          - "{{ argocd_app_namespace }}"
+          - -o
+          - jsonpath={.spec.syncPolicy.automated}
+      register: automated_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Record automated sync absent when syncPolicy missing
+      ansible.builtin.set_fact:
+        drpc_automated_present: false
+      when: not (drpc_sync_policy_present | bool)
+
+    - name: Record whether automated sync is enabled (from API)
+      ansible.builtin.set_fact:
+        drpc_automated_present: >-
+          {{ (automated_raw.stdout | length > 0) and (automated_raw.stdout != 'null') }}
+      when: drpc_sync_policy_present | bool
+
+    - name: Report sync already disabled
+      ansible.builtin.debug:
+        msg: Argo CD application has no automated sync to remove.
+      when: not (drpc_automated_present | default(false) | bool)
+
+    - name: Remove automated sync (JSON patch)
+      when: drpc_automated_present | default(false) | bool
+      ansible.builtin.shell: >-
+        oc patch applications.argoproj.io "{{ argocd_app_name }}"
+        -n "{{ argocd_app_namespace }}"
+        --type=json
+        -p='[{"op": "remove", "path": "/spec/syncPolicy/automated"}]'
+      register: patch_remove
+      changed_when: patch_remove.rc == 0
+      failed_when: false
+
+    - name: Merge-patch automated sync null (fallback)
+      when: drpc_automated_present | default(false) | bool and (patch_remove.rc | default(1) != 0)
+      ansible.builtin.shell: >-
+        oc patch applications.argoproj.io "{{ argocd_app_name }}"
+        -n "{{ argocd_app_namespace }}"
+        --type=merge
+        -p='{"spec":{"syncPolicy":{"automated":null}}}'
+      register: patch_merge
+      changed_when: patch_merge.rc == 0
+      failed_when: false

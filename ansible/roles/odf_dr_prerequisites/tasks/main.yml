@@ -1,0 +1,50 @@
+---
+# Capture rc without stopping the play so we can always emit stdout/stderr via debug, then fail.
+- name: Run ODF DR prerequisites check
+  ansible.builtin.command:
+    argv:
+      - bash
+      - "{{ role_path }}/files/odf-dr-prerequisites-check.sh"
+  environment:
+    PRIMARY_CLUSTER: "{{ primary_cluster }}"
+    SECONDARY_CLUSTER: "{{ secondary_cluster }}"
+  register: odf_prereq
+  changed_when: false
+  failed_when: false
+
+- name: Promote ODF script failure to Ansible output (non-zero exit)
+  ansible.builtin.debug:
+    msg: |-
+      ODF DR prerequisites script exited with rc={{ odf_prereq.rc }}.
+      ========== stderr ==========
+      {{ odf_prereq.stderr | default('', true) }}
+      ========== stdout (full) ==========
+      {{ odf_prereq.stdout | default('', true) }}
+  when: odf_prereq.rc != 0
+
+- name: Fail play when ODF prerequisites script failed
+  ansible.builtin.fail:
+    msg: >-
+      ODF DR prerequisites script exited with rc={{ odf_prereq.rc }}.
+      Full stdout/stderr were printed in the previous debug task.
+  when: odf_prereq.rc != 0
+
+- name: Promote recent ODF output when many retries preceded success (tail of stdout)
+  ansible.builtin.debug:
+    msg: |-
+      ODF prerequisites succeeded (rc=0) after a long run; last 8000 characters of script output
+      (includes recent FAILED — summary blocks and per-check ❌ lines):
+      {{ (odf_prereq.stdout | default(''))[-8000:] }}
+  when:
+    - odf_prereq.rc == 0
+    - (odf_prereq.stdout | default('') | length) > 6000
+
+- name: Promote full ODF stdout when retries happened but output is short
+  ansible.builtin.debug:
+    msg: |-
+      ODF prerequisites succeeded after one or more failed attempts (see FAILED — summary / ❌ lines below):
+      {{ odf_prereq.stdout | default('') }}
+  when:
+    - odf_prereq.rc == 0
+    - "'FAILED — summary' in odf_prereq.stdout"
+    - (odf_prereq.stdout | default('') | length) <= 6000

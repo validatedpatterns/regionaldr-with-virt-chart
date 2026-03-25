@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: prerequisites-checker
-        image: registry.redhat.io/openshift4/ose-cli:latest
+        image: {{ $.Values.ansible.containerImage }}
         env:
         - name: PRIMARY_CLUSTER
           value: {{ include "rdr.primaryClusterName" . | quote }}
@@ -26,5 +26,21 @@ spec:
         - /bin/bash
         - -c
         - |
-{{ .Files.Get "scripts/odf-dr-prerequisites-check.sh" | indent 10 }}
+{{ include "rdr.ansibleStageOnly" . | indent 10 }}
+            export PRIMARY_CLUSTER SECONDARY_CLUSTER
+            ODF_SCRIPT="$STAGE/roles/odf_dr_prerequisites/files/odf-dr-prerequisites-check.sh"
+            echo "Running ODF prerequisites script with line-buffered output (kubectl logs -f will show progress)."
+            if command -v stdbuf >/dev/null 2>&1; then
+              exec stdbuf -oL -eL bash "$ODF_SCRIPT"
+            else
+              exec bash "$ODF_SCRIPT"
+            fi
+        volumeMounts:
+        - name: ansible
+          mountPath: /ansible-cm
+          readOnly: true
+      volumes:
+      - name: ansible
+        configMap:
+          name: regionaldr-ansible
       serviceAccountName: odf-dr-prerequisites-checker

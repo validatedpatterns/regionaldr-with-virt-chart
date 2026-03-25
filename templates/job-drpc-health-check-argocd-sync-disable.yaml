@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: drpc-health-check
     app.kubernetes.io/component: argocd-sync-control
   annotations:
-    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-wave: "12"
     argocd.argoproj.io/sync-options: Prune=false
     argocd.argoproj.io/compare-options: IgnoreExtraneous
     argocd.argoproj.io/hook: "PostSync"
@@ -19,11 +19,12 @@ spec:
   ttlSecondsAfterFinished: 300
   template:
     spec:
+      {{- $drpcHC := index (.Values.drpc | default dict) "healthCheck" | default dict }}
       serviceAccountName: drpc-health-check-argocd-sync-control
       restartPolicy: Never
       containers:
       - name: drpc-health-checker
-        image: registry.redhat.io/openshift4/ose-cli:latest
+        image: {{ $.Values.ansible.containerImage }}
         resources:
           requests:
             memory: "128Mi"
@@ -35,18 +36,43 @@ spec:
         - /bin/bash
         - -c
         - |
-{{ .Files.Get "scripts/drpc-health-check-argocd-sync-disable.sh" | indent 10 }}
+{{ include "rdr.ansibleBootstrap" . | indent 10 }}
+            ansible-playbook -i inventory/hosts playbooks/drpc_health_check.yml \
+              -e "drpc_namespace=${DRPC_NAMESPACE:-openshift-dr-ops}" \
+              -e "drpc_name=${DRPC_NAME:-gitops-vm-protection}" \
+              -e "argocd_app_name=${ARGOCD_APP_NAME:-regional-dr}" \
+              -e "argocd_app_namespace=${ARGOCD_APP_NAMESPACE}" \
+              -e "protected_namespace=${PROTECTED_NAMESPACE}" \
+              -e "drpc_max_attempts=${DRPC_HEALTH_MAX_ATTEMPTS:-30}" \
+              -e "drpc_retry_delay_seconds=${DRPC_HEALTH_RETRY_DELAY:-30}" \
+              -e "drpc_delete_wait_retries=${DRPC_DELETE_WAIT_RETRIES:-24}" \
+              -e "drpc_delete_wait_delay=${DRPC_DELETE_WAIT_DELAY:-5}"
+        volumeMounts:
+        - name: ansible
+          mountPath: /ansible-cm
+          readOnly: true
         env:
         - name: DRPC_NAMESPACE
           value: {{ (index (.Values.drpc | default dict) "namespace") | default "openshift-dr-ops" | quote }}
         - name: DRPC_NAME
           value: {{ (index (.Values.drpc | default dict) "name") | default "gitops-vm-protection" | quote }}
         - name: PROTECTED_NAMESPACE
-          value: "gitops-vms"
+          value: {{ printf "%s-%s" (.Values.global.pattern | default "ramendr-starter-kit-hub") (index (.Values.main | default dict) "clusterGroupName" | default "resilient") | quote }}
         - name: ARGOCD_APP_NAME
           value: "regional-dr"
         - name: ARGOCD_APP_NAMESPACE
-          value: {{ printf "%s-%s" (.Values.global.pattern | default "ramendr-starter-kit-hub") (index (.Values.main | default dict) "clusterGroupName" | default "hub") | quote }}
+          value: {{ printf "%s-%s" (.Values.global.pattern | default "ramendr-starter-kit-hub") (index (.Values.main | default dict) "clusterGroupName" | default "resilient") | quote }}
+        - name: DRPC_HEALTH_MAX_ATTEMPTS
+          value: {{ index $drpcHC "maxAttempts" | default 30 | quote }}
+        - name: DRPC_HEALTH_RETRY_DELAY
+          value: {{ index $drpcHC "retryDelaySeconds" | default 30 | quote }}
+        - name: DRPC_DELETE_WAIT_RETRIES
+          value: {{ index $drpcHC "deleteWaitRetries" | default 24 | quote }}
+        - name: DRPC_DELETE_WAIT_DELAY
+          value: {{ index $drpcHC "deleteWaitDelay" | default 5 | quote }}
         - name: KUBECONFIG
           value: ""
-
+      volumes:
+      - name: ansible
+        configMap:
+          name: regionaldr-ansible

@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ -z "${SUBMARINER_PREREQ_LINEBUF:-}" ]] && command -v stdbuf >/dev/null 2>&1; then
+  export SUBMARINER_PREREQ_LINEBUF=1
+  exec stdbuf -oL -eL bash "$0" "$@"
+fi
 set -euo pipefail
 
 echo "Starting Submariner prerequisites check..."
@@ -6,12 +10,27 @@ echo "Starting Submariner prerequisites check..."
 # Configuration (PRIMARY_CLUSTER and SECONDARY_CLUSTER from values.yaml via env)
 PRIMARY_CLUSTER="${PRIMARY_CLUSTER:-ocp-primary}"
 SECONDARY_CLUSTER="${SECONDARY_CLUSTER:-ocp-secondary}"
+SUBMARINER_BROKER_NAMESPACE="${SUBMARINER_BROKER_NAMESPACE:-resilient-broker}"
 KUBECONFIG_DIR="/tmp/kubeconfigs"
 MAX_ATTEMPTS=120  # 2 hours with 1 minute intervals
 SLEEP_INTERVAL=60  # 1 minute between checks
 
 # Create kubeconfig directory
 mkdir -p "$KUBECONFIG_DIR"
+
+progress_sleep() {
+  local total=${1:-60}
+  local step=15
+  local elapsed=0
+  echo "⏳ Pausing ${total}s before continuing..."
+  while (( elapsed < total )); do
+    local chunk=$step
+    (( elapsed + chunk > total )) && chunk=$((total - elapsed))
+    sleep "$chunk"
+    elapsed=$((elapsed + chunk))
+    (( elapsed < total )) && echo "   ... ${elapsed}s / ${total}s elapsed (still in wait)"
+  done
+}
 
 # Function to check Submariner health and connectivity
 check_submariner_health() {
@@ -50,8 +69,8 @@ check_submariner_connectivity() {
   echo "Checking Submariner connectivity between $PRIMARY_CLUSTER and $SECONDARY_CLUSTER..."
   
   # Check Submariner clusters on hub cluster
-  local primary_cluster_id=$(oc get clusters.submariner.io "$PRIMARY_CLUSTER" -n resilient-broker -o jsonpath='{.spec.cluster_id}' 2>/dev/null || echo "")
-  local secondary_cluster_id=$(oc get clusters.submariner.io "$SECONDARY_CLUSTER" -n resilient-broker -o jsonpath='{.spec.cluster_id}' 2>/dev/null || echo "")
+  local primary_cluster_id=$(oc get clusters.submariner.io "$PRIMARY_CLUSTER" -n "$SUBMARINER_BROKER_NAMESPACE" -o jsonpath='{.spec.cluster_id}' 2>/dev/null || echo "")
+  local secondary_cluster_id=$(oc get clusters.submariner.io "$SECONDARY_CLUSTER" -n "$SUBMARINER_BROKER_NAMESPACE" -o jsonpath='{.spec.cluster_id}' 2>/dev/null || echo "")
   
   if [[ -z "$primary_cluster_id" || -z "$secondary_cluster_id" ]]; then
     echo "Could not retrieve cluster IDs from Submariner"
@@ -162,7 +181,7 @@ while true; do
       exit 0
     else
       echo "❌ Some Submariner prerequisites are not met. Waiting $SLEEP_INTERVAL seconds before retry..."
-      sleep $SLEEP_INTERVAL
+      progress_sleep "$SLEEP_INTERVAL"
       ((attempt++))
     fi
   done
@@ -178,6 +197,6 @@ while true; do
   echo "🔄 Restarting Submariner prerequisites check..."
   # Reset attempt counter and continue
   attempt=1
-  sleep $SLEEP_INTERVAL
+  progress_sleep "$SLEEP_INTERVAL"
 done  # End of infinite retry loop
 

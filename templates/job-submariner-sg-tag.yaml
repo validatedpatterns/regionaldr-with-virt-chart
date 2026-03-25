@@ -16,16 +16,24 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: sg-tagger
-        image: quay.io/validatedpatterns/utility-container:latest
-        command:
-        - /bin/bash
-        - -c
-        - |
-{{ .Files.Get "scripts/submariner-sg-tag.sh" | indent 10 }}
+        image: {{ $.Values.ansible.containerImage }}
         env:
         - name: AWS_SDK_LOAD_CONFIG
           value: "false"
         - name: AWS_EC2_METADATA_DISABLED
           value: "true"
+        command:
+        - /bin/bash
+        - -c
+        - |
+{{ include "rdr.ansibleBootstrap" . | indent 10 }}
+            ansible-playbook -i inventory/hosts playbooks/submariner_sg_tag.yml
+        volumeMounts:
+        - name: ansible
+          mountPath: /ansible-cm
+          readOnly: true
+      volumes:
+      - name: ansible
+        configMap:
+          name: regionaldr-ansible
       serviceAccountName: submariner-sg-tagger
-

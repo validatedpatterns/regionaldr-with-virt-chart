@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: drpc-health-check
     app.kubernetes.io/component: argocd-sync-control
   annotations:
-    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-wave: "12"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -18,12 +18,12 @@ metadata:
     app.kubernetes.io/name: drpc-health-check
     app.kubernetes.io/component: argocd-sync-control
   annotations:
-    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-wave: "12"
 rules:
-# Permissions for checking DRPC resources
+# Permissions for DRPC (check + delete when recipe reconciliation is stuck)
 - apiGroups: ["ramendr.openshift.io"]
   resources: ["drplacementcontrols"]
-  verbs: ["get", "list"]
+  verbs: ["get", "list", "delete"]
 # Permissions for checking PVCs
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
@@ -48,7 +48,7 @@ metadata:
     app.kubernetes.io/name: drpc-health-check
     app.kubernetes.io/component: argocd-sync-control
   annotations:
-    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-wave: "12"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

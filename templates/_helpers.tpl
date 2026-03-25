@@ -148,3 +148,13 @@
 {{- define "rdr.preferredClusterName" -}}
 {{- (index (.Values.drpc | default dict) "preferredCluster") | default (include "rdr.primaryClusterName" .) -}}
 {{- end -}}
+
+{{/* regionalDR[0].name (ClusterSet); Submariner broker namespace = name + "-broker" */}}
+{{- define "rdr.regionalDRClusterSetName" -}}
+{{- $dr := index .Values.regionalDR 0 -}}
+{{- $dr.name -}}
+{{- end -}}
+
+{{- define "rdr.submarinerBrokerNamespace" -}}
+{{ include "rdr.regionalDRClusterSetName" . }}-broker
+{{- end -}}

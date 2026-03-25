@@ -1,0 +1,6 @@
+---
+- name: Submariner security group AWS tagging
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - submariner_sg_tag
