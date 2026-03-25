@@ -7,6 +7,13 @@ argocd_app_namespace: ramendr-starter-kit-hub
 drpc_max_attempts: 60
 drpc_retry_delay_seconds: 60
 
+# Terminal phases where DR is considered healthy — stop polling conditions/PVC/kube checks.
+# Ramen uses Deployed after initial deploy; FailedOver / Relocated after completed DR actions.
+drpc_healthy_phases:
+  - Deployed
+  - FailedOver
+  - Relocated
+
 # Recipe reconcile failures usually appear soon after create; only auto-recover in this window (minutes).
 drpc_recipe_failure_max_age_minutes: 15
 # When DRPC status contains this phrase (case-insensitive, any JSON field), may delete DRPC and re-sync Argo CD.

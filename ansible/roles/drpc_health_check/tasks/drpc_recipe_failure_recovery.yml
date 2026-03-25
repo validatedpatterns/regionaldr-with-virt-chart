@@ -3,7 +3,7 @@
 - name: Log DRPC recipe failure recovery
   ansible.builtin.debug:
     msg: >-
-      DRPC {{ drpc_name }}/{{ drpc_namespace }} (age {{ drpc_age_minutes }}m, not Deployed) reports
+      DRPC {{ drpc_name }}/{{ drpc_namespace }} (age {{ drpc_age_minutes }}m, phase not healthy) reports
       '{{ drpc_recipe_failure_phrase }}' within {{ drpc_recipe_failure_max_age_minutes }}m window.
       Deleting DRPC and triggering Argo CD sync to recreate it.
 

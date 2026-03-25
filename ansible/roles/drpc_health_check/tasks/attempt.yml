@@ -28,14 +28,19 @@
         drpc_phase: "{{ (drpc_get.stdout | from_json).status.phase | default('', true) }}"
         drpc_conditions: "{{ (drpc_get.stdout | from_json).status.conditions | default([]) }}"
 
-    # Healthy = Deployed: stop polling conditions/PVC/objects; only disable Argo CD sync and exit.
-    - name: DRPC Deployed — finish without further status polling
-      when: drpc_phase == 'Deployed'
+    - name: Record whether DRPC phase is a terminal healthy state
+      ansible.builtin.set_fact:
+        drpc_is_healthy: "{{ drpc_phase in drpc_healthy_phases }}"
+
+    # Healthy terminal phase: stop polling conditions/PVC/objects; disable Argo CD sync and exit.
+    - name: DRPC healthy phase — finish without further status polling
+      when: drpc_is_healthy | bool
       block:
         - name: Report DRPC healthy
           ansible.builtin.debug:
             msg: >-
-              DRPC {{ drpc_name }}/{{ drpc_namespace }} phase is Deployed — skipping condition/PVC/object checks.
+              DRPC {{ drpc_name }}/{{ drpc_namespace }} phase={{ drpc_phase }} (healthy) —
+              skipping condition/PVC/object checks.
 
         - name: Disable Argo CD automated sync
           ansible.builtin.include_tasks: disable_argocd_sync.yml
@@ -44,16 +49,16 @@
           ansible.builtin.set_fact:
             drpc_all_passed: true
 
-    - name: DRPC not yet Deployed — recipe recovery, conditions, PVC, kube objects
-      when: drpc_phase != 'Deployed'
+    - name: DRPC not yet healthy — recipe recovery, conditions, PVC, kube objects
+      when: not (drpc_is_healthy | bool)
       block:
         - name: Detect recipe reconcile failure anywhere in DRPC status (e.g. max attempts exceeded)
           ansible.builtin.set_fact:
             drpc_recipe_failure_detected: "{{ (drpc_recipe_failure_phrase | lower) in (drpc_doc | to_json | lower) }}"
 
-        - name: DRPC fully healthy when phase is Deployed
+        - name: DRPC fully healthy when phase is in drpc_healthy_phases
           ansible.builtin.set_fact:
-            drpc_completely_healthy: "{{ drpc_phase == 'Deployed' }}"
+            drpc_completely_healthy: "{{ drpc_is_healthy | bool }}"
 
         - name: DRPC age in whole minutes since metadata.creationTimestamp
           ansible.builtin.command:
@@ -101,7 +106,7 @@
         - name: Note recipe failure outside auto-recovery window (enabled but too old to auto-delete)
           ansible.builtin.debug:
             msg: >-
-              DRPC shows '{{ drpc_recipe_failure_phrase }}' and is not Deployed; age {{ drpc_age_minutes }}m
+              DRPC shows '{{ drpc_recipe_failure_phrase }}' and phase is not healthy ({{ drpc_phase }}); age {{ drpc_age_minutes }}m
               exceeds {{ drpc_recipe_failure_max_age_minutes }}m — skipping delete/Argo re-sync; continuing checks.
           when:
             - drpc_recipe_failure_detected | bool
@@ -113,14 +118,14 @@
           ansible.builtin.fail:
             msg: >-
               DRPC (age {{ drpc_age_minutes }}m <= {{ drpc_recipe_failure_max_age_minutes }}m) contains
-              '{{ drpc_recipe_failure_phrase }}' and is not Deployed, but drpc_recipe_failure_recovery_enabled is false.
+              '{{ drpc_recipe_failure_phrase }}' and phase {{ drpc_phase }} is not healthy, but drpc_recipe_failure_recovery_enabled is false.
           when:
             - drpc_recipe_failure_detected | bool
             - not (drpc_completely_healthy | bool)
             - drpc_age_minutes | int <= drpc_recipe_failure_max_age_minutes | int
             - not (drpc_recipe_failure_recovery_enabled | bool)
 
-        - name: Require DRPC status conditions while not Deployed
+        - name: Require DRPC status conditions while not in a healthy phase
           ansible.builtin.assert:
             that:
               - drpc_conditions | length > 0
