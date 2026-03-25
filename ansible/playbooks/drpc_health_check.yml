@@ -1,6 +1,11 @@
 ---
 # DRPC health + disable Argo CD automated sync when healthy.
 # Wait criteria: drpc_max_attempts × drpc_retry_delay_seconds (default 60 × 60s = 1h).
+#
+# If DRPC is not healthy (phase != Deployed), status JSON contains drpc_recipe_failure_phrase
+# (default: "recipe reconcile failed"), and the object is at most drpc_recipe_failure_max_age_minutes
+# old (default 15), the role deletes the DRPC, waits until it is gone, patches the Argo CD Application
+# to sync, and retries on the next attempt. Healthy (Deployed) DRPCs skip this entirely.
 - name: DRPC health check and Argo CD sync disable
   hosts: localhost
   gather_facts: false

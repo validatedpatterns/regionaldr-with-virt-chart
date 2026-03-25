@@ -6,3 +6,11 @@ argocd_app_name: regional-dr
 argocd_app_namespace: ramendr-starter-kit-hub
 drpc_max_attempts: 60
 drpc_retry_delay_seconds: 60
+
+# Recipe reconcile failures usually appear soon after create; only auto-recover in this window (minutes).
+drpc_recipe_failure_max_age_minutes: 15
+# When DRPC status contains this phrase (case-insensitive, any JSON field), may delete DRPC and re-sync Argo CD.
+drpc_recipe_failure_phrase: recipe reconcile failed
+drpc_recipe_failure_recovery_enabled: true
+drpc_delete_wait_retries: 60
+drpc_delete_wait_delay: 5

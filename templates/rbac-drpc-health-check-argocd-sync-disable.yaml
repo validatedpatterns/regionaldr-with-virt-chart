@@ -20,10 +20,10 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "11"
 rules:
-# Permissions for checking DRPC resources
+# Permissions for DRPC (check + delete when recipe reconciliation is stuck)
 - apiGroups: ["ramendr.openshift.io"]
   resources: ["drplacementcontrols"]
-  verbs: ["get", "list"]
+  verbs: ["get", "list", "delete"]
 # Permissions for checking PVCs
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]

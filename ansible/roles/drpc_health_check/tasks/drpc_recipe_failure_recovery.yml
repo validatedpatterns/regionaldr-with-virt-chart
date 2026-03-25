@@ -1,0 +1,74 @@
+---
+# Delete stuck DRPC and ask Argo CD to re-apply it (per Argo CD sync-kubectl docs).
+- name: Log DRPC recipe failure recovery
+  ansible.builtin.debug:
+    msg: >-
+      DRPC {{ drpc_name }}/{{ drpc_namespace }} (age {{ drpc_age_minutes }}m, not Deployed) reports
+      '{{ drpc_recipe_failure_phrase }}' within {{ drpc_recipe_failure_max_age_minutes }}m window.
+      Deleting DRPC and triggering Argo CD sync to recreate it.
+
+- name: Delete DRPC stuck in recipe reconciliation
+  ansible.builtin.command:
+    argv:
+      - oc
+      - delete
+      - drplacementcontrol
+      - "{{ drpc_name }}"
+      - -n
+      - "{{ drpc_namespace }}"
+      - --ignore-not-found=true
+  register: drpc_delete_out
+  changed_when: drpc_delete_out.rc == 0
+
+- name: Wait for DRPC object to disappear
+  ansible.builtin.command:
+    argv:
+      - oc
+      - get
+      - drplacementcontrol
+      - "{{ drpc_name }}"
+      - -n
+      - "{{ drpc_namespace }}"
+  register: drpc_wait_gone
+  until: drpc_wait_gone.rc != 0
+  retries: "{{ drpc_delete_wait_retries | int }}"
+  delay: "{{ drpc_delete_wait_delay | int }}"
+  changed_when: false
+
+- name: Assert DRPC is gone before syncing Argo CD
+  ansible.builtin.assert:
+    that:
+      - drpc_wait_gone.rc != 0
+    fail_msg: >-
+      DRPC {{ drpc_name }} still exists in {{ drpc_namespace }} after
+      {{ drpc_delete_wait_retries }} retries ({{ drpc_delete_wait_delay }}s delay).
+
+- name: Trigger Argo CD application sync (merge operation)
+  ansible.builtin.shell: |
+    oc patch applications.argoproj.io "{{ argocd_app_name }}" -n "{{ argocd_app_namespace }}" \
+      --type=merge \
+      -p '{"operation":{"initiatedBy":{"username":"drpc-health-check"},"sync":{"syncStrategy":{"hook":{}}}}}'
+  register: argo_sync_patch
+  changed_when: argo_sync_patch.rc == 0
+  failed_when: false
+
+- name: Fallback — Argo CD hard refresh if sync patch failed
+  when: argo_sync_patch.rc != 0
+  ansible.builtin.command:
+    argv:
+      - oc
+      - annotate
+      - applications.argoproj.io
+      - "{{ argocd_app_name }}"
+      - -n
+      - "{{ argocd_app_namespace }}"
+      - argocd.argoproj.io/refresh=hard
+      - --overwrite
+  register: argo_refresh
+  changed_when: argo_refresh.rc == 0
+
+- name: Log Argo CD sync / refresh result
+  ansible.builtin.debug:
+    msg: >-
+      Argo CD sync patch rc={{ argo_sync_patch.rc | default('n/a') }};
+      fallback refresh rc={{ argo_refresh.rc | default('skipped') }}.
