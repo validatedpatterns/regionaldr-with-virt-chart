@@ -1,0 +1,3 @@
+# Automation jobs intentionally list/get cluster secrets (kubeconfigs) and patch ConfigMaps for DR/Ramen.
+AVD-KSV-0041
+AVD-KSV-0049

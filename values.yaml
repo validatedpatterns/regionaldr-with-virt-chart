@@ -82,7 +82,7 @@ drpc:
         operator: In
         values:
           - storage
-  preferredCluster: ocp-primary  # default; override in values-cluster-names or values
+  preferredCluster: ocp-primary # default; override in values-cluster-names or values
   # PostSync job drpc-health-check-argocd-sync-disable (ansible drpc_health_check role).
   healthCheck:
     maxAttempts: 30
@@ -109,7 +109,7 @@ regionalDR:
         version: 4.18.7
         install_config:
           apiVersion: v1
-          baseDomain: "{{ join \".\" (slice (splitList \".\" $.Values.global.clusterDomain) 1) }}"
+          baseDomain: '{{ join "." (slice (splitList "." $.Values.global.clusterDomain) 1) }}'
           metadata:
             name: ocp-primary
           controlPlane:
@@ -147,7 +147,7 @@ regionalDR:
         version: 4.18.7
         install_config:
           apiVersion: v1
-          baseDomain: "{{ join \".\" (slice (splitList \".\" $.Values.global.clusterDomain) 1) }}"
+          baseDomain: '{{ join "." (slice (splitList "." $.Values.global.clusterDomain) 1) }}'
           metadata:
             name: ocp-secondary
           controlPlane:

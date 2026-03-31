@@ -10,6 +10,7 @@
     src: /tmp/values/values-egv-dr.yaml
     dest: /tmp/edge-gitops-vms/values-egv-dr.yaml
     remote_src: true
+    mode: "0644"
 
 - name: Run Edge GitOps VMs deployment script
   ansible.builtin.command:

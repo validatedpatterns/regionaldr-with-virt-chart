@@ -1,0 +1,2 @@
+# Align with automation scripts: many locals use declare+assign; some scaffolding is reserved for future use.
+disable=SC2155,SC2034,SC2329,SC2317,SC2001,SC2126

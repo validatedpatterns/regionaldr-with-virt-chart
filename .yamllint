@@ -1,0 +1,16 @@
+---
+# Super-linter uses .github/linters/.yaml-lint.yml; keep rules aligned.
+extends: default
+ignore: |
+  /templates/
+
+rules:
+  document-start: disable
+  line-length:
+    max: 200
+    allow-non-breakable-inline-mappings: true
+  truthy:
+    allowed-values: ["true", "false", "on"]
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1

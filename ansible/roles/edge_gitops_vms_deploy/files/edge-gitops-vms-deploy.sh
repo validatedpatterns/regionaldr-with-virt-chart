@@ -48,7 +48,7 @@ check_resource_exists() {
   local kind="$2"
   local namespace="$3"
   local name="$4"
-  
+
   if [[ -z "$namespace" || "$namespace" == "null" ]]; then
     # Cluster-scoped resource
     if oc get "$kind" "$name" -o jsonpath='{.metadata.name}' &>/dev/null; then
@@ -66,30 +66,30 @@ check_resource_exists() {
 # Function to get target cluster from Placement resource
 get_target_cluster_from_placement() {
   echo "Getting target cluster from Placement resource: $PLACEMENT_NAME"
-  
+
   # Get the PlacementDecision for the Placement resource
   PLACEMENT_DECISION=$(oc get placementdecision -n "$DRPC_NAMESPACE" \
     -l cluster.open-cluster-management.io/placement="$PLACEMENT_NAME" \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-  
+
   if [[ -z "$PLACEMENT_DECISION" ]]; then
     echo "  ⚠️  Warning: Could not find PlacementDecision for $PLACEMENT_NAME"
     echo "  Will default to primary cluster (${PRIMARY_CLUSTER:-ocp-primary})"
     TARGET_CLUSTER="${PRIMARY_CLUSTER:-ocp-primary}"
     return 1
   fi
-  
+
   # Get the cluster name from PlacementDecision
   TARGET_CLUSTER=$(oc get placementdecision "$PLACEMENT_DECISION" -n "$DRPC_NAMESPACE" \
     -o jsonpath='{.status.decisions[0].clusterName}' 2>/dev/null || echo "")
-  
+
   if [[ -z "$TARGET_CLUSTER" ]]; then
     echo "  ⚠️  Warning: Could not determine target cluster from PlacementDecision"
     echo "  Will default to primary cluster (${PRIMARY_CLUSTER:-ocp-primary})"
     TARGET_CLUSTER="${PRIMARY_CLUSTER:-ocp-primary}"
     return 1
   fi
-  
+
   echo "  ✅ Target cluster determined from Placement: $TARGET_CLUSTER"
   return 0
 }
@@ -101,17 +101,17 @@ get_cluster_kubeconfig_to_file() {
   echo "  Getting kubeconfig for $cluster (from hub) -> $output_path"
   local secret_names=("${cluster}-admin-kubeconfig" "admin-kubeconfig" "import-kubeconfig")
   for secret_name in "${secret_names[@]}"; do
-    if oc get secret "$secret_name" -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null | \
-       base64 -d > "$output_path" 2>/dev/null && [[ -s "$output_path" ]]; then
+    if oc get secret "$secret_name" -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null |
+      base64 -d >"$output_path" 2>/dev/null && [[ -s "$output_path" ]]; then
       if KUBECONFIG="$output_path" oc get nodes &>/dev/null; then
         echo "  ✅ Retrieved kubeconfig for $cluster"
         return 0
       fi
     fi
   done
-  if oc get secret -n "$cluster" -o name 2>/dev/null | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 | \
-     xargs -I {} oc get {} -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null | \
-     base64 -d > "$output_path" 2>/dev/null && [[ -s "$output_path" ]]; then
+  if oc get secret -n "$cluster" -o name 2>/dev/null | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 |
+    xargs -I {} oc get {} -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null |
+    base64 -d >"$output_path" 2>/dev/null && [[ -s "$output_path" ]]; then
     if KUBECONFIG="$output_path" oc get nodes &>/dev/null; then
       echo "  ✅ Retrieved kubeconfig for $cluster"
       return 0
@@ -135,7 +135,7 @@ any_resource_exists_on_cluster() {
     if KUBECONFIG="$kubeconfig_path" oc get "$kind" "$name" -n "$VM_NAMESPACE" -o jsonpath='{.metadata.name}' &>/dev/null; then
       return 0
     fi
-  done < "$WORK_DIR/resources-list.txt"
+  done <"$WORK_DIR/resources-list.txt"
   return 1
 }
 
@@ -144,30 +144,30 @@ any_resource_exists_on_cluster() {
 get_target_cluster_kubeconfig() {
   local cluster="$1"
   echo "Getting kubeconfig for target managed cluster: $cluster (from hub cluster)"
-  
+
   # Try known secret names used by ACM for managed cluster kubeconfig
   local secret_names=("${cluster}-admin-kubeconfig" "admin-kubeconfig" "import-kubeconfig")
   local got_kubeconfig=false
-  
+
   for secret_name in "${secret_names[@]}"; do
-    if oc get secret "$secret_name" -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null | \
-       base64 -d > "$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
+    if oc get secret "$secret_name" -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null |
+      base64 -d >"$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
       got_kubeconfig=true
       echo "  ✅ Retrieved kubeconfig from secret $secret_name (namespace $cluster)"
       break
     fi
   done
-  
+
   if [[ "$got_kubeconfig" != "true" ]]; then
     # Fallback: any secret in namespace $cluster with kubeconfig data
-    if oc get secret -n "$cluster" -o name | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 | \
-       xargs -I {} oc get {} -n "$cluster" -o jsonpath='{.data.kubeconfig}' | \
-       base64 -d > "$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
+    if oc get secret -n "$cluster" -o name | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 |
+      xargs -I {} oc get {} -n "$cluster" -o jsonpath='{.data.kubeconfig}' |
+      base64 -d >"$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
       got_kubeconfig=true
       echo "  ✅ Retrieved kubeconfig for $cluster"
     fi
   fi
-  
+
   if [[ "$got_kubeconfig" == "true" ]]; then
     export KUBECONFIG="$WORK_DIR/target-kubeconfig.yaml"
     if oc get nodes &>/dev/null; then
@@ -177,7 +177,7 @@ get_target_cluster_kubeconfig() {
     echo "  ⚠️  Warning: Kubeconfig retrieved but could not verify connection to $cluster"
     return 1
   fi
-  
+
   echo "  ⚠️  Could not get kubeconfig for $cluster"
   return 1
 }
@@ -187,7 +187,7 @@ PRIMARY_CLUSTER="${PRIMARY_CLUSTER:-ocp-primary}"
 SECONDARY_CLUSTER="${SECONDARY_CLUSTER:-ocp-secondary}"
 
 # Get target cluster from Placement resource
-TARGET_CLUSTER="$PRIMARY_CLUSTER"  # Default to primary
+TARGET_CLUSTER="$PRIMARY_CLUSTER" # Default to primary
 if get_target_cluster_from_placement; then
   echo "  Target cluster: $TARGET_CLUSTER"
 else
@@ -229,26 +229,26 @@ echo "  Chart URL: $HELM_CHART_URL"
 echo "  Values file: $VALUES_FILE (from Helm template)"
 
 # Values file is created by Helm template using .Files.Get
-# Check if it exists and set VALUES_ARG accordingly
+# Check if it exists and set helm values args accordingly
+VALUES_ARGS=()
 if [[ -f "$VALUES_FILE" ]]; then
-  VALUES_ARG="-f $VALUES_FILE"
+  VALUES_ARGS=(-f "$VALUES_FILE")
   echo "  ✅ Using values file from Helm template: $VALUES_FILE"
 else
   echo "  ⚠️  Warning: Values file $VALUES_FILE not found, using default values"
-  VALUES_ARG=""
 fi
 
 # Render helm template
-if helm template edge-gitops-vms "$HELM_CHART_URL" $VALUES_ARG > "$WORK_DIR/helm-output.yaml" 2>&1; then
+if helm template edge-gitops-vms "$HELM_CHART_URL" "${VALUES_ARGS[@]}" >"$WORK_DIR/helm-output.yaml" 2>&1; then
   echo "  ✅ Helm template rendered successfully"
 else
   echo "  ❌ Error: Failed to render helm template"
   echo "  Attempting to download chart first..."
-  
+
   # Try downloading the chart first
   if curl -L -o "$WORK_DIR/edge-gitops-vms.tgz" "$HELM_CHART_URL" 2>/dev/null; then
     echo "  ✅ Chart downloaded successfully"
-    if helm template edge-gitops-vms "$WORK_DIR/edge-gitops-vms.tgz" $VALUES_ARG > "$WORK_DIR/helm-output.yaml" 2>&1; then
+    if helm template edge-gitops-vms "$WORK_DIR/edge-gitops-vms.tgz" "${VALUES_ARGS[@]}" >"$WORK_DIR/helm-output.yaml" 2>&1; then
       echo "  ✅ Helm template rendered successfully from local chart"
     else
       echo "  ❌ Error: Failed to render helm template from local chart"
@@ -268,7 +268,7 @@ echo "Step 3: Extracting VMs, Services, Routes, and ExternalSecrets from helm te
 if command -v yq &>/dev/null; then
   # Use yq to extract resources
   yq eval 'select(.kind == "VirtualMachine" or .kind == "Service" or .kind == "Route" or .kind == "ExternalSecret")' \
-    -d'*' "$WORK_DIR/helm-output.yaml" > "$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
+    -d'*' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
 else
   # Use awk to extract resources
   awk '
@@ -280,7 +280,7 @@ else
         print
       }
     }
-  ' "$WORK_DIR/helm-output.yaml" > "$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
+  ' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
 fi
 
 # Alternative: Use grep and awk to extract resources
@@ -301,7 +301,7 @@ if [[ ! -s "$WORK_DIR/resources-to-check.yaml" ]]; then
         print "---" resource
       }
     }
-  ' "$WORK_DIR/helm-output.yaml" > "$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
+  ' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
 fi
 
 # Count resources (remove any newlines/whitespace)
@@ -361,9 +361,9 @@ if [[ -s "$WORK_DIR/helm-output.yaml" ]]; then
         }
       }
     }
-  ' "$WORK_DIR/helm-output.yaml" > "$WORK_DIR/resources-list.txt"
+  ' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-list.txt"
 else
-  : > "$WORK_DIR/resources-list.txt"
+  : >"$WORK_DIR/resources-list.txt"
 fi
 
 # Step 3b: Check both primary and secondary for existing resources — skip deploy if found on either (avoid race during failover/Argo sync)
@@ -444,7 +444,7 @@ if [[ -s "$WORK_DIR/resources-list.txt" ]]; then
       ALL_EXIST=false
       MISSING_RESOURCES+=("$kind/$name in namespace $check_namespace")
     fi
-  done < "$WORK_DIR/resources-list.txt"
+  done <"$WORK_DIR/resources-list.txt"
 else
   echo "  ⚠️  Warning: No VMs, Services, Routes, or ExternalSecrets found in helm template"
   echo "  Note: These resources are optional - will proceed with applying the template"
@@ -461,36 +461,36 @@ if [[ "$ALL_EXIST" == "true" && ${#MISSING_RESOURCES[@]} -eq 0 ]]; then
 else
   echo "Step 5: Applying helm template..."
   echo "  Some resources are missing, applying template..."
-  
+
   if [[ ${#MISSING_RESOURCES[@]} -gt 0 ]]; then
     echo "  Missing resources:"
     for resource in "${MISSING_RESOURCES[@]}"; do
       echo "    - $resource"
     done
   fi
-  
+
   # Apply the helm template with namespace override to gitops-vms
   echo "  Applying helm template to namespace: $VM_NAMESPACE"
   echo "  Rendering and applying helm template..."
-  
+
   # First, render the helm template and save it to /tmp
   TEMPLATE_OUTPUT_FILE="/tmp/edge-gitops-vms-template.yaml"
   TEMPLATE_STDERR_FILE="$WORK_DIR/helm-template-stderr.log"
   echo "  Rendering helm template to: $TEMPLATE_OUTPUT_FILE"
-  
+
   # Temporarily disable exit on error to capture output even if helm template fails
   set +e
-  
+
   # Capture stdout and stderr separately - stderr might contain errors that shouldn't be in the YAML
-  helm template edge-gitops-vms "$HELM_CHART_URL" $VALUES_ARG --set namespace="$VM_NAMESPACE" > "$TEMPLATE_OUTPUT_FILE" 2>"$TEMPLATE_STDERR_FILE"
+  helm template edge-gitops-vms "$HELM_CHART_URL" "${VALUES_ARGS[@]}" --set namespace="$VM_NAMESPACE" >"$TEMPLATE_OUTPUT_FILE" 2>"$TEMPLATE_STDERR_FILE"
   HELM_TEMPLATE_EXIT_CODE=$?
-  
+
   # Re-enable exit on error
   set -e
-  
+
   # Check for errors in stderr
   HELM_TEMPLATE_STDERR=$(cat "$TEMPLATE_STDERR_FILE" 2>/dev/null || echo "")
-  
+
   if [[ $HELM_TEMPLATE_EXIT_CODE -ne 0 ]]; then
     echo "  ❌ Error: Failed to render helm template (exit code: $HELM_TEMPLATE_EXIT_CODE)"
     echo "  Helm template stderr:"
@@ -500,20 +500,20 @@ else
     cat "$TEMPLATE_OUTPUT_FILE" 2>/dev/null | head -50 | sed 's/^/    /' || echo "    (no output captured)"
     exit 1
   fi
-  
+
   # Check if stderr contains warnings or errors that might indicate issues
   if [[ -n "$HELM_TEMPLATE_STDERR" ]]; then
     echo "  ⚠️  Helm template warnings/errors:"
     echo "$HELM_TEMPLATE_STDERR" | sed 's/^/    /'
     echo ""
   fi
-  
+
   # Check if template output is valid
   if [[ ! -s "$TEMPLATE_OUTPUT_FILE" ]]; then
     echo "  ❌ Error: Helm template output is empty"
     exit 1
   fi
-  
+
   # Validate YAML syntax before applying
   echo "  Validating YAML syntax..."
   if command -v yq &>/dev/null; then
@@ -540,22 +540,22 @@ else
     fi
   fi
   echo "  ✅ YAML syntax is valid"
-  
+
   # Report what got rendered
   echo "  ✅ Helm template rendered successfully"
   echo "  Template file: $TEMPLATE_OUTPUT_FILE"
-  echo "  Template file size: $(wc -c < "$TEMPLATE_OUTPUT_FILE" 2>/dev/null || echo "0") bytes"
+  echo "  Template file size: $(wc -c <"$TEMPLATE_OUTPUT_FILE" 2>/dev/null || echo "0") bytes"
   echo ""
   echo "  Resources rendered in template:"
-  
+
   # Count and list resources
   RESOURCE_COUNT=$(grep -c "^kind:" "$TEMPLATE_OUTPUT_FILE" 2>/dev/null || echo "0")
   echo "    Total resources: $RESOURCE_COUNT"
-  
+
   # List resource kinds
   echo "    Resource kinds found:"
   grep "^kind:" "$TEMPLATE_OUTPUT_FILE" 2>/dev/null | sort | uniq -c | sed 's/^/      /' || echo "      (none found)"
-  
+
   # List resources with names and namespaces
   echo "    Resources with names:"
   awk '
@@ -572,14 +572,14 @@ else
       kind=""; name=""; namespace=""
     }
   ' "$TEMPLATE_OUTPUT_FILE" 2>/dev/null | head -20 || echo "      (could not parse resources)"
-  
+
   if [[ $RESOURCE_COUNT -gt 20 ]]; then
     echo "    ... (showing first 20 resources, total: $RESOURCE_COUNT)"
   fi
-  
+
   echo ""
   echo "  Applying template to namespace: $VM_NAMESPACE..."
-  
+
   # Require that we are using the target cluster's kubeconfig (never apply to hub)
   if [[ "${KUBECONFIG:-}" != "$WORK_DIR/target-kubeconfig.yaml" || ! -f "$WORK_DIR/target-kubeconfig.yaml" ]]; then
     echo "  ❌ Error: KUBECONFIG must point to target cluster ($TARGET_CLUSTER). Refusing to apply to avoid deploying to hub."
@@ -588,61 +588,61 @@ else
   CURRENT_CLUSTER=$(oc config view --minify -o jsonpath='{.contexts[0].context.cluster}' 2>/dev/null || echo "")
   echo "  Using kubeconfig: $KUBECONFIG (target: $TARGET_CLUSTER)"
   echo "  Current cluster context: $CURRENT_CLUSTER"
-  
+
   # Now apply the template and capture both stdout, stderr, and exit code
   # The oc apply will use the KUBECONFIG set earlier (target cluster's kubeconfig)
   # Use temporary files to capture stdout and stderr separately for better debugging
   APPLY_STDOUT_FILE="$WORK_DIR/oc-apply-stdout.log"
   APPLY_STDERR_FILE="$WORK_DIR/oc-apply-stderr.log"
-  
+
   echo "  Executing: oc apply -n $VM_NAMESPACE -f $TEMPLATE_OUTPUT_FILE"
-  
+
   # Temporarily disable exit on error to ensure we capture output even if oc apply fails
   set +e
-  
+
   # Capture stdout and stderr separately, then capture exit code
   echo "  Running oc apply command..."
   echo "  Command: oc apply -n $VM_NAMESPACE -f $TEMPLATE_OUTPUT_FILE"
-  
+
   # Run oc apply and capture output
   oc apply -n "$VM_NAMESPACE" -f "$TEMPLATE_OUTPUT_FILE" >"$APPLY_STDOUT_FILE" 2>"$APPLY_STDERR_FILE"
   APPLY_EXIT_CODE=$?
-  
+
   # Immediately flush output to ensure it's written
   sync 2>/dev/null || true
-  
+
   # Re-enable exit on error (but we'll handle the exit ourselves)
   set -e
-  
+
   # Immediately verify files were created and show sizes
   echo "  Command completed with exit code: $APPLY_EXIT_CODE"
-  
+
   # Force output flush
   echo "" >&2
-  
+
   if [[ -f "$APPLY_STDOUT_FILE" ]]; then
-    STDOUT_SIZE=$(wc -c < "$APPLY_STDOUT_FILE" 2>/dev/null || echo "0")
+    STDOUT_SIZE=$(wc -c <"$APPLY_STDOUT_FILE" 2>/dev/null || echo "0")
     echo "  stdout file exists: yes (size: $STDOUT_SIZE bytes)"
   else
     echo "  stdout file exists: no"
     STDOUT_SIZE=0
   fi
-  
+
   if [[ -f "$APPLY_STDERR_FILE" ]]; then
-    STDERR_SIZE=$(wc -c < "$APPLY_STDERR_FILE" 2>/dev/null || echo "0")
+    STDERR_SIZE=$(wc -c <"$APPLY_STDERR_FILE" 2>/dev/null || echo "0")
     echo "  stderr file exists: yes (size: $STDERR_SIZE bytes)"
   else
     echo "  stderr file exists: no"
     STDERR_SIZE=0
   fi
-  
+
   # If command failed, immediately show error output
   if [[ $APPLY_EXIT_CODE -ne 0 ]]; then
     echo ""
     echo "  ⚠️  oc apply failed with exit code $APPLY_EXIT_CODE"
     echo "  Displaying error output immediately..."
     echo ""
-    
+
     if [[ -f "$APPLY_STDERR_FILE" && $STDERR_SIZE -gt 0 ]]; then
       echo "  STDERR OUTPUT:"
       echo "  ----------------------------------------"
@@ -650,7 +650,7 @@ else
       echo "  ----------------------------------------"
       echo ""
     fi
-    
+
     if [[ -f "$APPLY_STDOUT_FILE" && $STDOUT_SIZE -gt 0 ]]; then
       echo "  STDOUT OUTPUT:"
       echo "  ----------------------------------------"
@@ -659,19 +659,19 @@ else
       echo ""
     fi
   fi
-  
+
   # Read stdout and stderr from files (always read, even if command failed)
   APPLY_STDOUT=""
   APPLY_STDERR=""
-  
+
   if [[ -f "$APPLY_STDOUT_FILE" ]]; then
     APPLY_STDOUT=$(cat "$APPLY_STDOUT_FILE" 2>/dev/null || echo "")
   fi
-  
+
   if [[ -f "$APPLY_STDERR_FILE" ]]; then
     APPLY_STDERR=$(cat "$APPLY_STDERR_FILE" 2>/dev/null || echo "")
   fi
-  
+
   # Combine stdout and stderr for full output
   APPLY_OUTPUT=""
   if [[ -n "$APPLY_STDOUT" ]]; then
@@ -689,9 +689,9 @@ ${APPLY_STDERR}"
 ${APPLY_STDERR}"
     fi
   fi
-  
+
   echo "  oc apply exit code: $APPLY_EXIT_CODE"
-  
+
   if [[ $APPLY_EXIT_CODE -eq 0 ]]; then
     echo "  ✅ Helm template applied successfully to namespace $VM_NAMESPACE"
     echo ""
@@ -702,19 +702,19 @@ ${APPLY_STDERR}"
         echo "    ... (output truncated, showing first 30 lines)"
       fi
     fi
-    
+
     # Verify resources were created
     echo ""
     echo "Step 6: Verifying deployed resources..."
     VERIFY_SUCCESS=true
-    
+
     if [[ -s "$WORK_DIR/resources-list.txt" ]]; then
       while IFS='|' read -r kind name namespace; do
         if [[ -n "$kind" && -n "$name" ]]; then
           # All resources (VMs, Services, Routes) should be in gitops-vms namespace
           check_namespace="$VM_NAMESPACE"
-          
-          sleep 1  # Give resources a moment to be created
+
+          sleep 1 # Give resources a moment to be created
           if check_resource_exists "" "$kind" "$check_namespace" "$name"; then
             echo "  ✅ Verified: $kind/$name exists in namespace $check_namespace"
           else
@@ -722,9 +722,9 @@ ${APPLY_STDERR}"
             VERIFY_SUCCESS=false
           fi
         fi
-      done < "$WORK_DIR/resources-list.txt"
+      done <"$WORK_DIR/resources-list.txt"
     fi
-    
+
     if [[ "$VERIFY_SUCCESS" == "true" ]]; then
       echo ""
       echo "✅ Edge GitOps VMs deployment completed successfully!"
@@ -744,7 +744,7 @@ ${APPLY_STDERR}"
     echo "  ========================================"
     echo "  Exit code: $APPLY_EXIT_CODE"
     echo ""
-    
+
     # Always show stdout if it exists
     if [[ -n "$APPLY_STDOUT" ]]; then
       echo "  ========================================"
@@ -756,7 +756,7 @@ ${APPLY_STDERR}"
       echo "  Standard output: (empty)"
       echo ""
     fi
-    
+
     # Always show stderr if it exists
     if [[ -n "$APPLY_STDERR" ]]; then
       echo "  ========================================"
@@ -768,7 +768,7 @@ ${APPLY_STDERR}"
       echo "  Standard error output: (empty)"
       echo ""
     fi
-    
+
     # Show combined output
     if [[ -n "$APPLY_OUTPUT" ]]; then
       echo "  ========================================"
@@ -791,14 +791,14 @@ ${APPLY_STDERR}"
     echo "  - Values file exists: $([ -f "$VALUES_FILE" ] && echo "yes" || echo "no")"
     echo "  - Template file: $TEMPLATE_OUTPUT_FILE"
     echo "  - Template file exists: $([ -f "$TEMPLATE_OUTPUT_FILE" ] && echo "yes" || echo "no")"
-    echo "  - Template file size: $(wc -c < "$TEMPLATE_OUTPUT_FILE" 2>/dev/null || echo "0") bytes"
+    echo "  - Template file size: $(wc -c <"$TEMPLATE_OUTPUT_FILE" 2>/dev/null || echo "0") bytes"
     echo ""
     echo "  ========================================"
     echo "  TEMPLATE FILE PREVIEW (first 200 lines)"
     echo "  ========================================"
     if [[ -f "$TEMPLATE_OUTPUT_FILE" ]]; then
       head -200 "$TEMPLATE_OUTPUT_FILE" | sed 's/^/  /'
-      if [[ $(wc -l < "$TEMPLATE_OUTPUT_FILE" 2>/dev/null || echo "0") -gt 200 ]]; then
+      if [[ $(wc -l <"$TEMPLATE_OUTPUT_FILE" 2>/dev/null || echo "0") -gt 200 ]]; then
         echo "  ... (file truncated, showing first 200 lines)"
         echo "  Full template saved at: $TEMPLATE_OUTPUT_FILE"
       fi
@@ -859,4 +859,3 @@ fi
 
 # Cleanup
 rm -rf "$WORK_DIR"
-

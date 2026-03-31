@@ -5,7 +5,7 @@ set -euo pipefail
 
 shopt -s nocasematch
 case "${BOUTIQUE_DEPLOY:-false}" in
-  true|1|yes) ;;
+  true | 1 | yes) ;;
   *)
     echo "Boutique deploy disabled (BOUTIQUE_DEPLOY=${BOUTIQUE_DEPLOY:-false}); skipping."
     exit 0
@@ -61,17 +61,17 @@ get_target_cluster_kubeconfig() {
   local secret_names=("${cluster}-admin-kubeconfig" "admin-kubeconfig" "import-kubeconfig")
   local got=false
   for secret_name in "${secret_names[@]}"; do
-    if oc get secret "$secret_name" -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null | \
-       base64 -d > "$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
+    if oc get secret "$secret_name" -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null |
+      base64 -d >"$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
       got=true
       echo "  ✅ kubeconfig from secret $secret_name"
       break
     fi
   done
   if [[ "$got" != "true" ]]; then
-    if oc get secret -n "$cluster" -o name 2>/dev/null | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 | \
-       xargs -I {} oc get {} -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null | \
-       base64 -d > "$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
+    if oc get secret -n "$cluster" -o name 2>/dev/null | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 |
+      xargs -I {} oc get {} -n "$cluster" -o jsonpath='{.data.kubeconfig}' 2>/dev/null |
+      base64 -d >"$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null && [[ -s "$WORK_DIR/target-kubeconfig.yaml" ]]; then
       got=true
     fi
   fi
