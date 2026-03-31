@@ -8,16 +8,19 @@ WORK_DIR="${WORK_DIR:-/tmp/odf-ssl-certs}"
 PRIMARY_CLUSTER="${PRIMARY_CLUSTER:?PRIMARY_CLUSTER is required}"
 SECONDARY_CLUSTER="${SECONDARY_CLUSTER:?SECONDARY_CLUSTER is required}"
 
-die() { echo "❌ odf-ssl-ramen-hub-configmap.sh: $*" >&2; exit 1; }
+die() {
+  echo "❌ odf-ssl-ramen-hub-configmap.sh: $*" >&2
+  exit 1
+}
 
-trap 'ec=$?; echo "❌ odf-ssl-ramen-hub-configmap.sh: command failed (exit $ec) at line $LINENO — see stderr above for the failing command." >&2' ERR
+trap 'echo "❌ odf-ssl-ramen-hub-configmap.sh: command failed (exit $?) at line $LINENO — see stderr above for the failing command." >&2' ERR
 
 mkdir -p "$WORK_DIR"
 [[ -f "$WORK_DIR/combined-ca-bundle.crt" ]] || die "missing $WORK_DIR/combined-ca-bundle.crt"
 
 echo "7b. Updating ramen-hub-operator-config in openshift-operators namespace (bash parity script)..."
 
-CA_BUNDLE_BASE64=$(base64 -w 0 < "$WORK_DIR/combined-ca-bundle.crt" 2>/dev/null || base64 < "$WORK_DIR/combined-ca-bundle.crt" | tr -d '\n')
+CA_BUNDLE_BASE64=$(base64 -w 0 <"$WORK_DIR/combined-ca-bundle.crt" 2>/dev/null || base64 <"$WORK_DIR/combined-ca-bundle.crt" | tr -d '\n')
 
 # Post-apply: fetch live YAML to disk (no huge shell vars) and validate structure.
 verify_post_apply() {
@@ -32,7 +35,7 @@ verify_post_apply() {
       sleep 2
     fi
     if oc get configmap ramen-hub-operator-config -n openshift-operators \
-      -o jsonpath='{.data.ramen_manager_config\.yaml}' > "$f" 2>/dev/null; then
+      -o jsonpath='{.data.ramen_manager_config\.yaml}' >"$f" 2>/dev/null; then
       oc_ok=1
     else
       oc_ok=0
@@ -52,7 +55,7 @@ verify_post_apply() {
     bad=0
     [[ "$PK" -gt 0 && "$CK" -lt "$PK" ]] && bad=1
     [[ "$PT" -gt 0 && "$CT" -lt "$PT" ]] && bad=1
-    maxp=$(( PK > PT ? PK : PT ))
+    maxp=$((PK > PT ? PK : PT))
     last_PK=$PK
     last_PT=$PT
     last_CK=$CK
@@ -68,7 +71,10 @@ verify_post_apply() {
   echo "  ❌ Post-apply verification failed after 10 attempts." >&2
   echo "  ❌ Diagnosis: oc_get_ok=$oc_ok last_kop_profiles=$last_PK last_kop_with_ca=$last_CK last_top_profiles=$last_PT last_top_with_ca=$last_CT last_max_profiles=$last_maxp last_section_bad=$last_bad (need each non-empty section fully CA-populated; max profiles >= $MIN_REQUIRED_PROFILES; at least $MIN_REQUIRED_PROFILES with CA in kop OR top)" >&2
   echo "  ❌ If kop/top counts are 0, the hub operator may have removed ramen_manager_config data or the key is empty." >&2
-  [[ -f "$f" ]] && { echo "  ❌ First 80 lines of live ramen_manager_config from cluster:" >&2; head -n 80 "$f" >&2; } || echo "  ❌ No verify file (oc get may have failed every attempt)." >&2
+  [[ -f "$f" ]] && {
+    echo "  ❌ First 80 lines of live ramen_manager_config from cluster:" >&2
+    head -n 80 "$f" >&2
+  } || echo "  ❌ No verify file (oc get may have failed every attempt)." >&2
   return 1
 }
 
@@ -86,7 +92,7 @@ if oc get configmap ramen-hub-operator-config -n openshift-operators &>/dev/null
       COUNT_TOP=$(echo "$EXISTING_YAML" | yq eval '.s3StoreProfiles | length' 2>/dev/null | tr -d ' \n\r' | head -1 || echo "0")
       COUNT_KOP=$((10#${COUNT_KOP:-0}))
       COUNT_TOP=$((10#${COUNT_TOP:-0}))
-      EXISTING_PROFILE_COUNT=$(( COUNT_KOP >= COUNT_TOP ? COUNT_KOP : COUNT_TOP ))
+      EXISTING_PROFILE_COUNT=$((COUNT_KOP >= COUNT_TOP ? COUNT_KOP : COUNT_TOP))
     else
       EXISTING_PROFILE_COUNT=$(echo "$EXISTING_YAML" | grep -c "s3ProfileName:" 2>/dev/null || echo "0")
       if [[ $EXISTING_PROFILE_COUNT -eq 0 ]]; then
@@ -105,7 +111,7 @@ if oc get configmap ramen-hub-operator-config -n openshift-operators &>/dev/null
 
   PATCHED_VIA_YQ=false
   if [[ -n "$EXISTING_YAML" ]]; then
-    echo "$EXISTING_YAML" > "$WORK_DIR/existing-ramen-config.yaml"
+    echo "$EXISTING_YAML" >"$WORK_DIR/existing-ramen-config.yaml"
     if ! command -v yq &>/dev/null; then
       die "yq is required (e.g. mikefarah/yq v4)"
     fi
@@ -138,11 +144,11 @@ s3StoreProfiles:
   fi
 
   if [[ "$PATCHED_VIA_YQ" != "true" ]]; then
-    echo "$UPDATED_YAML" > "$WORK_DIR/ramen_manager_config.yaml"
+    echo "$UPDATED_YAML" >"$WORK_DIR/ramen_manager_config.yaml"
   fi
 
   echo "  Building ConfigMap manifest (literal block) and oc apply..."
-  oc get configmap ramen-hub-operator-config -n openshift-operators -o yaml > "$WORK_DIR/ramen-configmap-template.yaml" 2>/dev/null || true
+  oc get configmap ramen-hub-operator-config -n openshift-operators -o yaml >"$WORK_DIR/ramen-configmap-template.yaml" 2>/dev/null || true
 
   UPDATE_EXIT_CODE=1
   UPDATE_OUTPUT=""
@@ -156,7 +162,7 @@ s3StoreProfiles:
       echo "data:"
       echo "  ramen_manager_config.yaml: |"
       sed 's/^/    /' "$WORK_DIR/ramen_manager_config.yaml"
-    } > "$WORK_DIR/ramen-configmap-updated.yaml"
+    } >"$WORK_DIR/ramen-configmap-updated.yaml"
     if UPDATE_OUTPUT=$(oc apply -f "$WORK_DIR/ramen-configmap-updated.yaml" 2>&1); then
       UPDATE_EXIT_CODE=0
     else

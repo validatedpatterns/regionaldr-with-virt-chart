@@ -1,0 +1,2 @@
+# Helm / Go templates are not valid YAML for Prettier
+templates/

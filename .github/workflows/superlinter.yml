@@ -5,8 +5,10 @@ on:
   pull_request:
     branches: [main]
 
+# Super-Linter posts per-language commit statuses (MULTI_STATUS); token needs statuses:write.
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   lint:

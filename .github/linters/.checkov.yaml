@@ -10,3 +10,7 @@ skip-check:
   - CKV_K8S_156 # Minimize ClusterRoles that grant permissions to approve CertificateSigningRequests
   - CKV_K8S_157 # Minimize Roles and ClusterRoles that grant permissions to bind RoleBindings or ClusterRoleBindings
   - CKV_K8S_158 # Minimize Roles and ClusterRoles that grant permissions to escalate Roles or ClusterRoles
+  # Base64-looking strings in values/docs; not secrets
+  - CKV_SECRET_6
+  # Playbooks use blocks with explicit fail/debug; rescue would change control flow
+  - CKV2_ANSIBLE_3

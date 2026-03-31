@@ -1,3 +1,4 @@
+{{- $b := .Values.boutique | default dict }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -69,6 +70,18 @@ spec:
           value: {{ include "rdr.secondaryClusterName" . | quote }}
         - name: HELM_CHART_VERSION
           value: {{ index (index .Values "edgeGitopsVms" | default dict) "chartVersion" | default "0.2.10" | quote }}
+        - name: BOUTIQUE_DEPLOY
+          value: {{ if $b.deploy }}"true"{{ else }}"false"{{ end }}
+        - name: BOUTIQUE_NAMESPACE
+          value: {{ $b.namespace | default "boutique" | quote }}
+        - name: BOUTIQUE_CHART_VERSION
+          value: {{ $b.chartVersion | default "0.0.4" | quote }}
+        - name: BOUTIQUE_CHART_NAME
+          value: {{ $b.chartName | default "boutique" | quote }}
+        - name: BOUTIQUE_HELM_REPO_URL
+          value: {{ $b.helmRepoUrl | default "https://charts.validatedpatterns.io" | quote }}
+        - name: BOUTIQUE_HELM_REPO_ALIAS
+          value: {{ $b.helmRepoAlias | default "validatedpatterns" | quote }}
       volumes:
       - name: values
         configMap:

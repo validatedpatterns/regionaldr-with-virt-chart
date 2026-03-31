@@ -1,0 +1,5 @@
+---
+# Super-linter picks this up from LINTER_RULES_PATH.
+# Role variables are shared across playbooks/extra-vars; full role-prefix renames are out of scope.
+skip_list:
+  - var-naming[no-role-prefix]

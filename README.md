@@ -15,6 +15,12 @@ v0.1.0 - Initial release
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | ansible.containerImage | string | `"quay.io/validatedpatterns/utility-container:latest"` |  |
+| boutique.chartName | string | `"boutique"` |  |
+| boutique.chartVersion | string | `"0.0.4"` |  |
+| boutique.deploy | bool | `false` |  |
+| boutique.helmRepoAlias | string | `"validatedpatterns"` |  |
+| boutique.helmRepoUrl | string | `"https://charts.validatedpatterns.io"` |  |
+| boutique.namespace | string | `"boutique"` |  |
 | clusterDeployments.awsSecretKey | string | `"secret/hub/aws"` |  |
 | clusterDeployments.pullSecretKey | string | `"secret/hub/openshiftPullSecret"` |  |
 | clusterDeployments.secretRefreshInterval | string | `"90s"` |  |
@@ -43,6 +49,8 @@ v0.1.0 - Initial release
 | odfRamenTrustedCa.pollInterval | int | `15` |  |
 | odfRamenTrustedCa.ramenS3WaitSeconds | int | `3600` |  |
 | odfRamenTrustedCa.trustedCaWaitSeconds | int | `3600` |  |
+| redis.external.address | string | `"rhel9-redis-001.gitops-vms.svc.cluster.local"` |  |
+| redis.external.enabled | bool | `false` |  |
 | regionalDR[0].clusters.primary.clusterGroup | string | `"resilient"` |  |
 | regionalDR[0].clusters.primary.install_config.apiVersion | string | `"v1"` |  |
 | regionalDR[0].clusters.primary.install_config.baseDomain | string | `"{{ join \".\" (slice (splitList \".\" $.Values.global.clusterDomain) 1) }}"` |  |

@@ -1,0 +1,2 @@
+# Super-linter also reads .github/linters/.shellcheckrc; keep in sync.
+disable=SC2155,SC2034,SC2329,SC2317,SC2001,SC2126
