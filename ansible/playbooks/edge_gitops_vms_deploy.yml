@@ -6,5 +6,12 @@
     primary_cluster: "{{ lookup('env', 'PRIMARY_CLUSTER') | default('ocp-primary', true) }}"
     secondary_cluster: "{{ lookup('env', 'SECONDARY_CLUSTER') | default('ocp-secondary', true) }}"
     helm_chart_version: "{{ lookup('env', 'HELM_CHART_VERSION') | default('0.2.10', true) }}"
+    boutique_deploy: "{{ lookup('env', 'BOUTIQUE_DEPLOY') | default('false', true) }}"
+    boutique_namespace: "{{ lookup('env', 'BOUTIQUE_NAMESPACE') | default('boutique', true) }}"
+    boutique_chart_version: "{{ lookup('env', 'BOUTIQUE_CHART_VERSION') | default('0.0.4', true) }}"
+    boutique_chart_name: "{{ lookup('env', 'BOUTIQUE_CHART_NAME') | default('boutique', true) }}"
+    boutique_helm_repo_url: "{{ lookup('env', 'BOUTIQUE_HELM_REPO_URL') | default('https://charts.validatedpatterns.io', true) }}"
+    boutique_helm_repo_alias: "{{ lookup('env', 'BOUTIQUE_HELM_REPO_ALIAS') | default('validatedpatterns', true) }}"
+    boutique_values_file: "{{ lookup('env', 'BOUTIQUE_VALUES_FILE') | default('/tmp/values/values-egv-dr.yaml', true) }}"
   roles:
     - edge_gitops_vms_deploy

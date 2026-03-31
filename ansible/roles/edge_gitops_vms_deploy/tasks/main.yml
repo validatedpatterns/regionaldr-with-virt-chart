@@ -40,3 +40,39 @@
       Edge GitOps VMs deploy script exited with rc={{ edge_gitops_deploy.rc }}.
       Full stdout/stderr were printed in the previous debug task.
   when: edge_gitops_deploy.rc != 0
+
+- name: Optional boutique chart (same job as edge-gitops-vms)
+  when: boutique_deploy | string | lower in ['true', '1', 'yes']
+  block:
+    - name: Run boutique chart on primary/placement target
+      ansible.builtin.command:
+        argv:
+          - bash
+          - "{{ role_path }}/files/boutique-chart-deploy.sh"
+      environment:
+        PRIMARY_CLUSTER: "{{ primary_cluster }}"
+        SECONDARY_CLUSTER: "{{ secondary_cluster }}"
+        BOUTIQUE_DEPLOY: "true"
+        BOUTIQUE_NAMESPACE: "{{ boutique_namespace }}"
+        BOUTIQUE_CHART_VERSION: "{{ boutique_chart_version }}"
+        BOUTIQUE_CHART_NAME: "{{ boutique_chart_name }}"
+        BOUTIQUE_HELM_REPO_URL: "{{ boutique_helm_repo_url }}"
+        BOUTIQUE_HELM_REPO_ALIAS: "{{ boutique_helm_repo_alias }}"
+        BOUTIQUE_VALUES_FILE: "{{ boutique_values_file }}"
+      register: boutique_deploy_out
+      changed_when: false
+
+    - name: Boutique deploy failure details
+      ansible.builtin.debug:
+        msg: |-
+          boutique-chart-deploy.sh rc={{ boutique_deploy_out.rc }}
+          --- stderr ---
+          {{ boutique_deploy_out.stderr | default('', true) }}
+          --- stdout ---
+          {{ boutique_deploy_out.stdout | default('', true) }}
+      when: boutique_deploy_out.rc != 0
+
+    - name: Fail when boutique deploy failed
+      ansible.builtin.fail:
+        msg: Boutique chart deploy failed (see previous debug).
+      when: boutique_deploy_out.rc != 0

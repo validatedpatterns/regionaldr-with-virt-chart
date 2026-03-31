@@ -12,6 +12,20 @@ main:
 edgeGitopsVms:
   chartVersion: "0.3.0"
 
+# Optional: install boutique from charts.validatedpatterns.io on the same cluster as edge-gitops-vms (PostSync job).
+boutique:
+  deploy: false
+  namespace: boutique
+  chartVersion: "0.0.4"
+  chartName: boutique
+  helmRepoUrl: https://charts.validatedpatterns.io
+  helmRepoAlias: validatedpatterns
+
+redis:
+  external:
+    enabled: false
+    address: rhel9-redis-001.gitops-vms.svc.cluster.local
+
 secretStore:
   name: vault-backend
   kind: ClusterSecretStore
