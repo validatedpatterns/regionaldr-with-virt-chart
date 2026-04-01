@@ -24,7 +24,7 @@ spec:
     captureInterval: {{ index $kop "captureInterval" | default "2m0s" }}
     kubeObjectSelector:
 {{- if empty $kubeObjMatchExpr }}
-      matchExpressions: {}
+      matchExpressions: []
 {{- else }}
       matchExpressions:
 {{- toYaml $kubeObjMatchExpr | nindent 8 }}
@@ -43,7 +43,7 @@ spec:
   {{- end }}
   pvcSelector:
 {{- if empty $pvcMatchExpr }}
-    matchExpressions: {}
+    matchExpressions: []
 {{- else }}
     matchExpressions:
 {{- toYaml $pvcMatchExpr | nindent 6 }}
