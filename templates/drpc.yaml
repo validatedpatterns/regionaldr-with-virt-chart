@@ -1,9 +1,7 @@
 {{- $drpc := .Values.drpc | default dict }}
 {{- $kop := index $drpc "kubeObjectProtection" | default dict }}
 {{- $kos := index $kop "kubeObjectSelector" | default dict }}
-{{- $kubeObjMatchExpr := index $kos "matchExpressions" }}
 {{- $pvcSel := index $drpc "pvcSelector" | default dict }}
-{{- $pvcMatchExpr := index $pvcSel "matchExpressions" }}
 ---
 apiVersion: ramendr.openshift.io/v1alpha1
 kind: DRPlacementControl
@@ -22,12 +20,11 @@ spec:
     name: {{ index $drpc "drPolicyRef" "name" | default "2m-vm" }}
   kubeObjectProtection:
     captureInterval: {{ index $kop "captureInterval" | default "2m0s" }}
-    kubeObjectSelector:
-{{- if empty $kubeObjMatchExpr }}
-      matchExpressions: []
+{{- if empty $kos }}
+    kubeObjectSelector: {}
 {{- else }}
-      matchExpressions:
-{{- toYaml $kubeObjMatchExpr | nindent 8 }}
+    kubeObjectSelector:
+{{- toYaml $kos | nindent 6 }}
 {{- end }}
   placementRef:
     apiVersion: cluster.open-cluster-management.io/v1beta1
@@ -41,10 +38,9 @@ spec:
   {{- else }}
   - gitops-vms
   {{- end }}
-  pvcSelector:
-{{- if empty $pvcMatchExpr }}
-    matchExpressions: []
+{{- if empty $pvcSel }}
+  pvcSelector: {}
 {{- else }}
-    matchExpressions:
-{{- toYaml $pvcMatchExpr | nindent 6 }}
+  pvcSelector:
+{{- toYaml $pvcSel | nindent 4 }}
 {{- end }}
