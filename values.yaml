@@ -66,22 +66,16 @@ drpc:
   kubeObjectProtection:
     captureInterval: 2m0s
     kubeObjectSelector:
-      matchExpressions:
-        - key: drprotection
-          operator: In
-          values:
-            - "true"
+      # Missing, null, {}, or [] → chart renders matchExpressions: {}. Set a list to add requirements.
+      matchExpressions: {}
   placementRef:
     name: gitops-vm-protection-placement-1
     namespace: openshift-dr-ops
   protectedNamespaces:
     - gitops-vms
   pvcSelector:
-    matchExpressions:
-      - key: app.kubernetes.io/component
-        operator: In
-        values:
-          - storage
+    # Missing, null, {}, or [] → chart renders matchExpressions: {}. Set a list to add requirements.
+    matchExpressions: {}
   preferredCluster: ocp-primary # default; override in values-cluster-names or values
   # PostSync job drpc-health-check-argocd-sync-disable (ansible drpc_health_check role).
   healthCheck:
