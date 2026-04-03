@@ -10,7 +10,7 @@ main:
 
 # Edge GitOps VMs deployment (script and helm chart)
 edgeGitopsVms:
-  chartVersion: "0.3.2"
+  chartVersion: "0.3.3"
 
 # Optional: install boutique from charts.validatedpatterns.io on the same cluster as edge-gitops-vms (PostSync job).
 boutique:
