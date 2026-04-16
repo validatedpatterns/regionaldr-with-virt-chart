@@ -9,14 +9,65 @@
 {{- $cluster := . }}
 {{- $baseDomainRaw := index $cluster.install_config "baseDomain" }}
 {{- $baseDomainStr := default $defaultBaseDomain (and (kindIs "string" $baseDomainRaw) $baseDomainRaw) }}
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ $cluster.name }}
 
+{{- if $.Values.byoc }}
 ---
-apiVersion: external-secrets.io/v1
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {{ $cluster.name }}-auto-impport-kubeconfig
+  namespace: {{ $cluster.name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  dataFrom:
+    - extract:
+        conversionStrategy: Default
+        decodingStrategy: None
+        key: secret/hub/{{ $cluster.name }}_cluster_kubeconfig
+        metadataPolicy: None
+  refreshInterval: 24h0m0s
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: auto-import-secret
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {{ $cluster.name }}-admin-kubeconfig
+  namespace: {{ $cluster.name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  dataFrom:
+    - extract:
+        conversionStrategy: Default
+        decodingStrategy: None
+        key: secret/hub/{{ $cluster.name }}_cluster_kubeconfig
+        metadataPolicy: None
+  refreshInterval: 24h0m0s
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: admin-kubeconfig
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+{{- else }}
+---
+apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: {{ $cluster.name }}-cluster-private-key
@@ -28,12 +79,12 @@ spec:
     - extract:
         conversionStrategy: Default
         decodingStrategy: None
-        key: {{ $.Values.clusterDeployments.awsSecretKey }}
+        key: secret/hub/privatekey
         metadataPolicy: None
-  refreshInterval: {{ $.Values.clusterDeployments.secretRefreshInterval }}
+  refreshInterval: 24h0m0s
   secretStoreRef:
-    kind: {{ $.Values.secretStore.kind }}
-    name: {{ $.Values.secretStore.name }}
+    kind: ClusterSecretStore
+    name: vault-backend
   target:
     creationPolicy: Owner
     deletionPolicy: Retain
@@ -44,7 +95,7 @@ spec:
       type: Opaque
 
 ---
-apiVersion: external-secrets.io/v1
+apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: {{ $cluster.name }}-cluster-pull-secret
@@ -56,44 +107,16 @@ spec:
     - extract:
         conversionStrategy: Default
         decodingStrategy: None
-        key: {{ $.Values.clusterDeployments.pullSecretKey }}
+        key: secret/hub/openshiftPullSecret
         metadataPolicy: None
-  refreshInterval: {{ $.Values.clusterDeployments.secretRefreshInterval }}
+  refreshInterval: 24h0m0s
   secretStoreRef:
-    kind: {{ $.Values.secretStore.kind }}
-    name: {{ $.Values.secretStore.name }}
+    kind: ClusterSecretStore
+    name: vault-backend
   target:
     creationPolicy: Owner
     deletionPolicy: Retain
     name: {{ $cluster.name }}-cluster-pull-secret
-    template:
-      engineVersion: v2
-      mergePolicy: Replace
-      type: Opaque
-
----
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: {{ $cluster.name }}-cluster-aws-creds
-  namespace: {{ $cluster.name }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "0"
-spec:
-  dataFrom:
-    - extract:
-        conversionStrategy: Default
-        decodingStrategy: None
-        key: {{ $.Values.clusterDeployments.awsSecretKey }}
-        metadataPolicy: None
-  refreshInterval: {{ $.Values.clusterDeployments.secretRefreshInterval }}
-  secretStoreRef:
-    kind: {{ $.Values.secretStore.kind }}
-    name: {{ $.Values.secretStore.name }}
-  target:
-    creationPolicy: Owner
-    deletionPolicy: Retain
-    name: {{ $cluster.name }}-cluster-aws-creds
     template:
       engineVersion: v2
       mergePolicy: Replace
@@ -145,7 +168,41 @@ spec:
       name: img{{ $cluster.version }}-multi-appsub
   pullSecretRef:
     name: {{ $cluster.name }}-cluster-pull-secret
+{{- end }} {{- /* if .Values.byoc */}}
 
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {{ $cluster.name }}-cluster-aws-creds
+  namespace: {{ $cluster.name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  dataFrom:
+    - extract:
+        conversionStrategy: Default
+        decodingStrategy: None
+        key: secret/hub/aws
+        metadataPolicy: None
+  refreshInterval: 24h0m0s
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: {{ $cluster.name }}-cluster-aws-creds
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $cluster.name }}
 ---
 apiVersion: cluster.open-cluster-management.io/v1
 kind: ManagedCluster
@@ -188,4 +245,4 @@ spec:
     enabled: true
   iamPolicyController:
     enabled: true
-{{- end }}
+{{- end }} {{- /* range list $effectivePrimary $effectiveSecondary */}}

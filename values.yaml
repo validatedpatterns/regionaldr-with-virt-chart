@@ -1,4 +1,7 @@
 ---
+# "Bring Your Own Cluster". By default we use hive to provision them
+byoc: false
+
 global:
   clusterDomain: cluster.example.com
   # Pattern name; target application namespace = global.pattern-main.clusterGroupName
