@@ -1,3 +1,4 @@
+{{- if eq "1" (include "rdr.submarinerSgTagJobEnabled" . | trim) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -37,3 +38,4 @@ spec:
         configMap:
           name: regionaldr-ansible
       serviceAccountName: submariner-sg-tagger
+{{- end }}

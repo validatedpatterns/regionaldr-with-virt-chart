@@ -7,6 +7,7 @@
 {{- $defaultBaseDomain := join "." (slice (splitList "." (.Values.global.clusterDomain | default "cluster.example.com")) 1) }}
 {{- range list $effectivePrimary $effectiveSecondary }}
 {{- $cluster := . }}
+{{- $awsPlat := eq "1" (include "rdr.clusterPlatformAws" $ | trim) }}
 {{- $baseDomainRaw := index $cluster.install_config "baseDomain" }}
 {{- $baseDomainStr := default $defaultBaseDomain (and (kindIs "string" $baseDomainRaw) $baseDomainRaw) }}
 
@@ -153,7 +154,7 @@ spec:
   clusterName: {{ $cluster.name }}
   installAttemptsLimit: 1
   platform:
-{{- if $cluster.install_config.platform.aws }}
+{{- if and $awsPlat $cluster.install_config.platform.aws }}
     aws:
       credentialsSecretRef:
         name: {{ $cluster.name }}-cluster-aws-creds
@@ -170,6 +171,7 @@ spec:
     name: {{ $cluster.name }}-cluster-pull-secret
 {{- end }} {{- /* if .Values.byoc */}}
 
+{{- if $awsPlat }}
 ---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
@@ -197,6 +199,7 @@ spec:
       engineVersion: v2
       mergePolicy: Replace
       type: Opaque
+{{- end }}
 
 ---
 apiVersion: v1

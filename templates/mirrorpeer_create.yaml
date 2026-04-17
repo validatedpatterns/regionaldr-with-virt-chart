@@ -1,3 +1,4 @@
+{{- if eq "1" (include "rdr.odfPostInstallFixesEnabled" . | trim) }}
 {{- range .Values.regionalDR }}
 {{ $clusterSet := .name }}
 {{ $clusters := .clusters }}
@@ -22,4 +23,5 @@ spec:
       namespace: openshift-storage
   manageS3: true
   type: async
+{{- end }}
 {{- end }}

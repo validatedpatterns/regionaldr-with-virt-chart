@@ -26,6 +26,7 @@ spec:
 {{- $effectiveSecondary := include "rdr.effectiveSecondaryCluster" . | fromJson }}
 {{- range list $effectivePrimary $effectiveSecondary }}
 {{- $cluster := . }}
+{{- $awsPlat := eq "1" (include "rdr.clusterPlatformAws" $ | trim) }}
 ---
 apiVersion: addon.open-cluster-management.io/v1alpha1
 kind: ManagedClusterAddOn
@@ -48,14 +49,18 @@ metadata:
 spec:
   gatewayConfig:
     gateways: 1
+{{- if $awsPlat }}
     aws:
       instanceType: {{ $.Values.submariner.instanceType }}
+{{- end }}
   {{- if eq $.Values.submariner.cableDriver "libreswan" }}
   IPSecNATTPort: {{ $.Values.submariner.ipsecNatPort }}
   NATTEnable: {{ $.Values.submariner.NATTEnable }}
   {{- end }}
   cableDriver: {{ $.Values.submariner.cableDriver }}
+{{- if $awsPlat }}
   credentialsSecret:
     name: {{ $cluster.name }}-cluster-aws-creds
+{{- end }}
 
 {{- end }}
