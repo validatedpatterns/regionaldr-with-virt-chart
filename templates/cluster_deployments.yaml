@@ -80,7 +80,7 @@ spec:
     - extract:
         conversionStrategy: Default
         decodingStrategy: None
-        key: secret/hub/privatekey
+        key: secret/hub/privatekey # gitleaks:allow Vault path for ExternalSecret, not a credential
         metadataPolicy: None
   refreshInterval: 24h0m0s
   secretStoreRef:

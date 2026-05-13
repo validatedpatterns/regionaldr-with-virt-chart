@@ -16,3 +16,5 @@ jobs:
     with:
       sl_env: |
         VALIDATE_BIOME_FORMAT=false
+        ANSIBLE_CONFIG=ansible/ansible.cfg
+        ANSIBLE_CONFIG_FILE=.ansible-lint
