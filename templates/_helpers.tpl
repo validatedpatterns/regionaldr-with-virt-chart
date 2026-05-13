@@ -158,3 +158,23 @@
 {{- define "rdr.submarinerBrokerNamespace" -}}
 {{ include "rdr.regionalDRClusterSetName" . }}-broker
 {{- end -}}
+
+{{/* global.clusterPlatform (e.g. AWS, BareMetal, GCP): AWS gates AWS-only chart pieces. Case-insensitive; default AWS preserves prior behavior. */}}
+{{- define "rdr.clusterPlatformAws" -}}
+{{- $g := .Values.global | default dict -}}
+{{- if eq "aws" (lower ($g.clusterPlatform | default "AWS" | toString)) -}}1{{- else -}}0{{- end -}}
+{{- end -}}
+
+{{/* Submariner EC2 SG tagger job + RBAC: AWS platform and submariner.sgTagJobEnabled true. */}}
+{{- define "rdr.submarinerSgTagJobEnabled" -}}
+{{- $sm := .Values.submariner | default dict -}}
+{{- $aws := eq "1" (include "rdr.clusterPlatformAws" . | trim) -}}
+{{- $want := and (hasKey $sm "sgTagJobEnabled") (index $sm "sgTagJobEnabled") -}}
+{{- if and $aws $want -}}1{{- else -}}0{{- end -}}
+{{- end -}}
+
+{{/* ODF post-install fixes: prerequisites checker + Ramen trusted CA jobs/RBAC. Default on if .Values.odf.postInstallFixesEnabled omitted. */}}
+{{- define "rdr.odfPostInstallFixesEnabled" -}}
+{{- $odf := .Values.odf | default dict -}}
+{{- if not (hasKey $odf "postInstallFixesEnabled") -}}1{{- else if index $odf "postInstallFixesEnabled" -}}1{{- else -}}0{{- end -}}
+{{- end -}}

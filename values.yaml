@@ -6,6 +6,16 @@ global:
   clusterDomain: cluster.example.com
   # Pattern name; target application namespace = global.pattern-main.clusterGroupName
   pattern: ramendr-starter-kit-hub
+  # AWS: Hive AWS creds ExternalSecret, ClusterDeployment platform.aws, Submariner gateway/credentials. Use non-AWS (e.g. BareMetal) to skip those.
+  clusterPlatform: AWS
+
+# ODF post-install automation: MirrorPeer, prerequisites checker + Ramen hub trusted CA jobs/RBAC.
+odf:
+  postInstallFixesEnabled: true
+  # When postInstallFixesEnabled is false: chart creates DRCluster CRs (hub) for primary/secondary; set S3 profile names that exist in hub Ramen config.
+  drCluster:
+    primaryS3ProfileName: ""
+    secondaryS3ProfileName: ""
 
 # Main cluster group (primary); target application namespace = global.pattern-main.clusterGroupName
 main:
@@ -43,6 +53,8 @@ submariner:
   ipsecNatPort: 4500
   NATTEnable: true
   cableDriver: vxlan
+  # EC2 security group tagging job (AWS only; requires global.clusterPlatform AWS).
+  sgTagJobEnabled: false
 
 # Minimal overrides for cluster names, versions, regions (e.g. overrides/values-cluster-names.yaml).
 # Merge override file FIRST so full regionalDR stays here and only clusterOverrides are applied.
@@ -86,6 +98,7 @@ drpc:
 ansible:
   containerImage: quay.io/validatedpatterns/utility-container:latest
 
+# When odf.postInstallFixesEnabled is true: odf-dr-prerequisites + odf-ramen-trusted-ca jobs/RBAC below.
 # Post-sync job odf-ramen-trusted-ca (wave 9): CA from hub cluster-proxy-ca-bundle; waits for Ramen s3StoreProfiles.
 odfRamenTrustedCa:
   ramenS3WaitSeconds: 3600

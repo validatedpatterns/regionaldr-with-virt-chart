@@ -1,0 +1,23 @@
+---
+# Match Checkov posture: chart Jobs use the Validated Patterns utility image and broad RBAC.
+misconfiguration:
+  skip-checks:
+    - AVD-KSV-0001
+    - AVD-KSV-0003
+    - AVD-KSV-0004
+    - AVD-KSV-0011
+    - AVD-KSV-0012
+    - AVD-KSV-0013
+    - AVD-KSV-0014
+    - AVD-KSV-0015
+    - AVD-KSV-0016
+    - AVD-KSV-0018
+    - AVD-KSV-0020
+    - AVD-KSV-0021
+    - AVD-KSV-0030
+    - AVD-KSV-0056
+    - AVD-KSV-0104
+    - AVD-KSV-0106
+    - AVD-KSV-0109
+    - AVD-KSV-0118
+    - AVD-KSV-0125

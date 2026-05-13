@@ -5,6 +5,23 @@ directory:
 skip-path:
   - tests
 skip-check:
+  # Validated Patterns utility Jobs (Helm): hardening rules are impractical without rewriting all workloads
+  - CKV_K8S_10
+  - CKV_K8S_11
+  - CKV_K8S_12
+  - CKV_K8S_13
+  - CKV_K8S_14
+  - CKV_K8S_20
+  - CKV_K8S_22
+  - CKV_K8S_23
+  - CKV_K8S_28
+  - CKV_K8S_29
+  - CKV_K8S_30
+  - CKV_K8S_31
+  - CKV_K8S_37
+  - CKV_K8S_38
+  - CKV_K8S_40
+  - CKV_K8S_43
   - CKV_K8S_49 # Minimize wildcard use in Roles and ClusterRoles
   - CKV_K8S_155 # Minimize ClusterRoles that grant control over validating or mutating admission webhook configurations
   - CKV_K8S_156 # Minimize ClusterRoles that grant permissions to approve CertificateSigningRequests

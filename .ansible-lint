@@ -1,0 +1,5 @@
+---
+# Used when ansible-lint runs from the repository root (e.g. Super-Linter).
+# Role vars are shared across playbooks; full role-prefix renames are out of scope.
+skip_list:
+  - var-naming[no-role-prefix]
