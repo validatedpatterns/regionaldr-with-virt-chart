@@ -1,0 +1,21 @@
+suite: submariner SG tag job gating
+templates:
+  - job-submariner-sg-tag.yaml
+tests:
+  - it: does not render Job when submariner.sgTagJobEnabled is false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders submariner-sg-tagger Job when AWS platform and sgTagJobEnabled
+    set:
+      submariner.sgTagJobEnabled: true
+    asserts:
+      - notFailedTemplate: {}
+      - containsDocument:
+          kind: Job
+          apiVersion: batch/v1
+          name: submariner-sg-tagger
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: submariner-sg-tagger

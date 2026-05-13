@@ -1,0 +1,86 @@
+# Select ClusterDeployments by unique spec.platform.aws.region (install_config differs per cluster).
+# helm-unittest document order can differ from `helm template`; avoid brittle documentIndex.
+suite: cluster deployments BYOC vs Hive
+templates:
+  - cluster_deployments.yaml
+tests:
+  - it: Hive mode emits primary ClusterDeployment with AWS region from install_config
+    documentSelector:
+      path: spec.platform.aws.region
+      value: us-west-1
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: kind
+          value: ClusterDeployment
+      - equal:
+          path: apiVersion
+          value: hive.openshift.io/v1
+      - equal:
+          path: metadata.name
+          value: ocp-primary
+
+  - it: Hive mode emits secondary ClusterDeployment with AWS region from install_config
+    documentSelector:
+      path: spec.platform.aws.region
+      value: us-east-1
+    asserts:
+      - equal:
+          path: kind
+          value: ClusterDeployment
+      - equal:
+          path: metadata.name
+          value: ocp-secondary
+
+  - it: BYOC does not emit Hive ClusterDeployments
+    set:
+      byoc: true
+    asserts:
+      # For matchRegex, not: true sets Negative so a document fails only when kind matches the pattern.
+      - matchRegex:
+          path: kind
+          pattern: ^ClusterDeployment$
+        not: true
+
+  - it: BYOC renders primary admin kubeconfig ExternalSecret
+    set:
+      byoc: true
+    documentSelector:
+      path: metadata.name
+      value: ocp-primary-admin-kubeconfig
+    asserts:
+      - equal:
+          path: kind
+          value: ExternalSecret
+      - equal:
+          path: apiVersion
+          value: external-secrets.io/v1beta1
+
+  - it: BYOC renders primary ManagedCluster
+    set:
+      byoc: true
+    documentSelector:
+      path: metadata.labels.name
+      value: ocp-primary
+    asserts:
+      - equal:
+          path: kind
+          value: ManagedCluster
+      - equal:
+          path: apiVersion
+          value: cluster.open-cluster-management.io/v1
+      - equal:
+          path: metadata.name
+          value: ocp-primary
+
+  - it: cluster name override updates primary ClusterDeployment name and keeps AWS region
+    set:
+      clusterOverrides.primary.name: ocp-primary-alt
+      clusterOverrides.primary.install_config.metadata.name: ocp-primary-alt
+    documentSelector:
+      path: spec.platform.aws.region
+      value: us-west-1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: ocp-primary-alt

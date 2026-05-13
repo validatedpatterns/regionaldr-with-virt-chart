@@ -1,5 +1,6 @@
 ---
-# "Bring Your Own Cluster". By default we use hive to provision them
+# "Bring Your Own Cluster". When true, Hive ClusterDeployment may carry a stale infraID from a failed
+# provision attempt; the submariner SG tag job uses the managed cluster Infrastructure CR instead.
 byoc: false
 
 global:
@@ -191,3 +192,11 @@ regionalDR:
       - interval: 2m
         vmSupport: true
       - interval: 2m
+
+# helm-unittest only (templates/helm-unittest/rdr-merge-fixture.yaml). Stays off for normal installs.
+helmUnittest:
+  rdrMerge:
+    enabled: false
+    mergeInstallConfig:
+      base: {}
+      over: {}
