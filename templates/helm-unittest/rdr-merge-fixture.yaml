@@ -1,0 +1,44 @@
+{{- if (index (index (.Values.helmUnittest | default dict) "rdrMerge" | default dict) "enabled") }}
+{{- $p := include "rdr.effectivePrimaryCluster" . | fromJson }}
+{{- $ic := index $p "install_config" | default dict }}
+{{- $plat := index $ic "platform" | default dict }}
+{{- $aws := index $plat "aws" | default dict }}
+{{- $tags := index $aws "userTags" | default dict }}
+{{- $cp := index $ic "controlPlane" | default dict }}
+{{- $cpPlat := index $cp "platform" | default dict }}
+{{- $cpAws := index $cpPlat "aws" | default dict }}
+{{- $comp := index $ic "compute" | default list }}
+{{- $s := include "rdr.effectiveSecondaryCluster" . | fromJson }}
+{{- $sic := index $s "install_config" | default dict }}
+{{- $splat := index $sic "platform" | default dict }}
+{{- $saws := index $splat "aws" | default dict }}
+{{- $hut := index (.Values.helmUnittest | default dict) "rdrMerge" | default dict }}
+{{- $micfg := index $hut "mergeInstallConfig" | default dict }}
+{{- $mbase := index $micfg "base" | default dict }}
+{{- $mover := index $micfg "over" | default dict }}
+{{- $m := include "rdr.mergeInstallConfig" (dict "base" $mbase "over" $mover) | fromJson }}
+{{- $mplat := index $m "platform" | default dict }}
+{{- $maws := index $mplat "aws" | default dict }}
+{{- $mut := index $maws "userTags" | default dict }}
+{{- $mmeta := index $m "metadata" | default dict }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rdr-merge-fixture
+  namespace: default
+  labels:
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/component: helm-unittest
+data:
+  primaryAwsRegion: {{ index $aws "region" | default "" | quote }}
+  primaryUserTagsProject: {{ index $tags "project" | default "" | quote }}
+  primaryMetadataName: {{ index (index $ic "metadata" | default dict) "name" | default "" | quote }}
+  primaryCpAwsType: {{ index $cpAws "type" | default "" | quote }}
+  primaryCpReplicas: {{ if hasKey $cp "replicas" }}{{ index $cp "replicas" | toString | quote }}{{ else }}""{{ end }}
+  primaryComputeLen: {{ len $comp | toString | quote }}
+  primaryCompute0Replicas: {{ if gt (len $comp) 0 }}{{ index (index $comp 0) "replicas" | toString | quote }}{{ else }}"0"{{ end }}
+  secondaryAwsRegion: {{ index $saws "region" | default "" | quote }}
+  mergeAwsRegion: {{ index $maws "region" | default "" | quote }}
+  mergeUserTagsProject: {{ index $mut "project" | default "" | quote }}
+  mergeMetadataName: {{ index $mmeta "name" | default "" | quote }}
+{{- end }}

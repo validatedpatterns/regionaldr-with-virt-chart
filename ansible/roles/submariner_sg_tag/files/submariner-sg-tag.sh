@@ -96,6 +96,9 @@ download_kubeconfig() {
 }
 
 # Function to get infrastructure name from a cluster
+# Prefer managed cluster infrastructure.status.infrastructureName: that matches AWS (SG names, etc.).
+# Hub ClusterDeployment.spec.clusterMetadata.infraID can be a stale Hive attempt ID in BYOC after a
+# failed provision, while the joined cluster reflects the real openshift-install infraID.
 get_infrastructure_name() {
 	local cluster="$1"
 	local kubeconfig="$2"
@@ -105,23 +108,30 @@ get_infrastructure_name() {
 
 	local infra_name=""
 
-	# Method 1: Try to get from ClusterDeployment on hub (most reliable, no need for managed cluster access)
-	# Try status.infrastructureName first (set after cluster is provisioned)
+	# Method 1: Managed cluster infrastructure status (authoritative for AWS naming)
+	if [[ -n "$kubeconfig" && -f "$kubeconfig" ]]; then
+		if oc --kubeconfig="$kubeconfig" get infrastructure cluster &>/dev/null; then
+			infra_name=$(oc --kubeconfig="$kubeconfig" get infrastructure cluster -o jsonpath='{.status.infrastructureName}' 2>/dev/null || echo "")
+			if [[ -n "$infra_name" ]]; then
+				echo "  ✅ Infrastructure name from managed cluster infrastructure.status: $infra_name" >&2
+				echo "$infra_name"
+				return 0
+			fi
+			echo "  Managed cluster infrastructure.status.infrastructureName empty, trying hub ClusterDeployment..." >&2
+		else
+			echo "  No infrastructure.cluster on managed cluster (or no access), trying hub ClusterDeployment..." >&2
+		fi
+	fi
+
+	# Method 2: ClusterDeployment on hub (Hive; may lag or reflect a failed attempt in BYOC)
 	infra_name=$(oc get clusterdeployment "$cluster" -n "$cluster" -o jsonpath='{.status.infrastructureName}' 2>/dev/null || echo "")
-	# Fallback to spec.clusterMetadata.infraID if status doesn't have it
 	if [[ -z "$infra_name" ]]; then
 		infra_name=$(oc get clusterdeployment "$cluster" -n "$cluster" -o jsonpath='{.spec.clusterMetadata.infraID}' 2>/dev/null || echo "")
 	fi
 
-	# Method 2: Try to get from infrastructure status on managed cluster
-	if [[ -z "$infra_name" ]]; then
-		echo "  Trying to get infrastructure name from managed cluster infrastructure status..." >&2
-		infra_name=$(oc --kubeconfig="$kubeconfig" get infrastructure cluster -o jsonpath='{.status.infrastructureName}' 2>/dev/null || echo "")
-	fi
-
-	# Method 3: Try to get from infrastructure metadata name
-	if [[ -z "$infra_name" ]]; then
-		echo "  Trying to get infrastructure name from infrastructure metadata..." >&2
+	# Method 3: Managed cluster infrastructure metadata name
+	if [[ -z "$infra_name" && -n "$kubeconfig" && -f "$kubeconfig" ]]; then
+		echo "  Trying managed cluster infrastructure.metadata.name..." >&2
 		infra_name=$(oc --kubeconfig="$kubeconfig" get infrastructure cluster -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
 	fi
 

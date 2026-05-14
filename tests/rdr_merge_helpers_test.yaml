@@ -1,0 +1,129 @@
+# helm-unittest: merge behavior for rdr.effectivePrimaryCluster, rdr.effectiveSecondaryCluster,
+# and rdr.mergeInstallConfig (see templates/helm-unittest/rdr-merge-fixture.yaml).
+suite: rdr merge helpers
+templates:
+  - helm-unittest/rdr-merge-fixture.yaml
+tests:
+  - it: baseline primary and secondary inherit regionalDR platform.aws without clusterOverrides
+    set:
+      helmUnittest.rdrMerge.enabled: true
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: data.primaryAwsRegion
+          value: us-west-1
+      - equal:
+          path: data.primaryUserTagsProject
+          value: ValidatedPatterns
+      - equal:
+          path: data.secondaryAwsRegion
+          value: us-east-1
+      - equal:
+          path: data.primaryCpAwsType
+          value: m5.4xlarge
+      - equal:
+          path: data.primaryCpReplicas
+          value: "3"
+
+  - it: primary platform.aws.region override wins and preserves base userTags
+    set:
+      helmUnittest.rdrMerge.enabled: true
+      clusterOverrides.primary.install_config.platform.aws.region: eu-central-1
+    asserts:
+      - equal:
+          path: data.primaryAwsRegion
+          value: eu-central-1
+      - equal:
+          path: data.primaryUserTagsProject
+          value: ValidatedPatterns
+
+  - it: secondary platform.aws.region override wins
+    set:
+      helmUnittest.rdrMerge.enabled: true
+      clusterOverrides.secondary.install_config.platform.aws.region: ap-southeast-1
+    asserts:
+      - equal:
+          path: data.secondaryAwsRegion
+          value: ap-southeast-1
+      - equal:
+          path: data.primaryAwsRegion
+          value: us-west-1
+
+  - it: primary metadata.name override wins
+    set:
+      helmUnittest.rdrMerge.enabled: true
+      clusterOverrides.primary.install_config.metadata.name: custom-meta
+    asserts:
+      - equal:
+          path: data.primaryMetadataName
+          value: custom-meta
+
+  - it: primary controlPlane.platform.aws.type override wins and keeps base replicas
+    set:
+      helmUnittest.rdrMerge.enabled: true
+      clusterOverrides.primary.install_config.controlPlane.platform.aws.type: m6i.2xlarge
+    asserts:
+      - equal:
+          path: data.primaryCpAwsType
+          value: m6i.2xlarge
+      - equal:
+          path: data.primaryCpReplicas
+          value: "3"
+
+  - it: primary empty compute override keeps base worker pool
+    set:
+      helmUnittest.rdrMerge.enabled: true
+      clusterOverrides.primary.install_config.compute: []
+    asserts:
+      - equal:
+          path: data.primaryComputeLen
+          value: "1"
+      - equal:
+          path: data.primaryCompute0Replicas
+          value: "3"
+
+  - it: primary non-empty compute override replaces compute list
+    set:
+      helmUnittest.rdrMerge.enabled: true
+      clusterOverrides.primary.install_config.compute:
+        - name: worker
+          replicas: 7
+          platform:
+            aws:
+              type: m5.metal
+    asserts:
+      - equal:
+          path: data.primaryComputeLen
+          value: "1"
+      - equal:
+          path: data.primaryCompute0Replicas
+          value: "7"
+
+  - it: mergeInstallConfig deep-merges platform.aws with override region and base userTags
+    set:
+      helmUnittest.rdrMerge.enabled: true
+      helmUnittest.rdrMerge.mergeInstallConfig:
+        base:
+          metadata:
+            name: base-only
+          platform:
+            aws:
+              region: us-west-1
+              userTags:
+                project: merge-base
+        over:
+          metadata:
+            name: over-wins
+          platform:
+            aws:
+              region: eu-central-1
+    asserts:
+      - equal:
+          path: data.mergeAwsRegion
+          value: eu-central-1
+      - equal:
+          path: data.mergeUserTagsProject
+          value: merge-base
+      - equal:
+          path: data.mergeMetadataName
+          value: over-wins
