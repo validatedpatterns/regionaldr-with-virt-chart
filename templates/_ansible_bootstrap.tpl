@@ -25,6 +25,12 @@ cd "$STAGE"
 {{- define "rdr.ansibleBootstrap" -}}
 {{ include "rdr.ansibleStageOnly" . }}
 export ANSIBLE_LOCAL_TMP=/tmp/ansible-tmp
+{{- $verbosity := .Values.ansible.verbosity | default 0 | int }}
+{{- if gt $verbosity 4 }}{{- $verbosity = 4 }}{{- end }}
+{{- if lt $verbosity 0 }}{{- $verbosity = 0 }}{{- end }}
+{{- if gt $verbosity 0 }}
+export ANSIBLE_VERBOSITY={{ $verbosity }}
+{{- end }}
 python3 -m pip install --user -q --no-warn-script-location 'ansible-core>=2.15,<2.17'
 export PATH="/tmp/.local/bin:$PATH"
 {{- end }}
