@@ -17,6 +17,9 @@ spec:
   backoffLimit: 5
   activeDeadlineSeconds: 14400
   template:
+    metadata:
+      annotations:
+        {{- include "rdr.ansibleJobPodAnnotations" . | nindent 8 }}
     spec:
       restartPolicy: Never
       serviceAccountName: odf-ramen-trusted-ca

@@ -13,6 +13,9 @@ spec:
   backoffLimit: 3
   activeDeadlineSeconds: 3600
   template:
+    metadata:
+      annotations:
+        {{- include "rdr.ansibleJobPodAnnotations" . | nindent 8 }}
     spec:
       restartPolicy: OnFailure
       containers:

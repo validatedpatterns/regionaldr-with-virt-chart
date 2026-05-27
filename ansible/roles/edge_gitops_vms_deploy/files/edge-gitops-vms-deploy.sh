@@ -23,7 +23,7 @@ display_apply_error() {
 }
 
 echo "Starting Edge GitOps VMs deployment check and deployment..."
-echo "This job will deploy os-images and workload VMs to the placement target spoke"
+echo "This job will check for existing VMs, Services, Routes, ExternalSecrets, DataVolumes, and DataSources before applying the helm template"
 
 # Configuration (HELM_CHART_VERSION from values/env, default 0.2.10)
 HELM_CHART_VERSION="${HELM_CHART_VERSION:-0.2.10}"
@@ -362,13 +362,13 @@ echo "Step 3: Extracting VMs, Services, Routes, ExternalSecrets, DataVolumes, an
 # Extract resources using yq or awk
 if command -v yq &>/dev/null; then
 	# Use yq to extract resources
-	yq eval 'select(.kind == "VirtualMachine" or .kind == "Service" or .kind == "Route" or .kind == "ExternalSecret")' \
-		-d'*' "$WORK_DIR/workload-manifest.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
+	yq eval 'select(.kind == "VirtualMachine" or .kind == "Service" or .kind == "Route" or .kind == "ExternalSecret" or .kind == "DataVolume" or .kind == "DataSource")' \
+		-d'*' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
 else
 	# Use awk to extract resources
 	awk '
     BEGIN { RS="---\n"; ORS="---\n" }
-    /^kind: (VirtualMachine|Service|Route|ExternalSecret)$/ || /^kind: VirtualMachine$/ || /^kind: Service$/ || /^kind: Route$/ || /^kind: ExternalSecret$/ {
+    /^kind: (VirtualMachine|Service|Route|ExternalSecret|DataVolume|DataSource)$/ || /^kind: VirtualMachine$/ || /^kind: Service$/ || /^kind: Route$/ || /^kind: ExternalSecret$/ || /^kind: DataVolume$/ || /^kind: DataSource$/ {
       print
       getline
       while (getline && !/^---$/) {
@@ -386,7 +386,7 @@ if [[ ! -s "$WORK_DIR/resources-to-check.yaml" ]]; then
       RS="---"
       resource=""
     }
-    /^kind: VirtualMachine$/ || /^kind: Service$/ || /^kind: Route$/ || /^kind: ExternalSecret$/ {
+    /^kind: VirtualMachine$/ || /^kind: Service$/ || /^kind: Route$/ || /^kind: ExternalSecret$/ || /^kind: DataVolume$/ || /^kind: DataSource$/ {
       resource=$0
       getline
       while (getline && !/^---$/) {
@@ -404,22 +404,28 @@ VM_COUNT=$(grep -c "^kind: VirtualMachine" "$WORK_DIR/resources-to-check.yaml" 2
 SERVICE_COUNT=$(grep -c "^kind: Service" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
 ROUTE_COUNT=$(grep -c "^kind: Route" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
 EXTERNAL_SECRET_COUNT=$(grep -c "^kind: ExternalSecret" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
+DATA_VOLUME_COUNT=$(grep -c "^kind: DataVolume" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
+DATA_SOURCE_COUNT=$(grep -c "^kind: DataSource" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
 
 # Ensure counts are numeric (handle empty results)
 VM_COUNT=${VM_COUNT:-0}
 SERVICE_COUNT=${SERVICE_COUNT:-0}
 ROUTE_COUNT=${ROUTE_COUNT:-0}
 EXTERNAL_SECRET_COUNT=${EXTERNAL_SECRET_COUNT:-0}
+DATA_VOLUME_COUNT=${DATA_VOLUME_COUNT:-0}
+DATA_SOURCE_COUNT=${DATA_SOURCE_COUNT:-0}
 
 echo "  Found workload resources in template:"
 echo "    - VirtualMachines: $VM_COUNT"
 echo "    - Services: $SERVICE_COUNT"
 echo "    - Routes: $ROUTE_COUNT"
 echo "    - ExternalSecrets: $EXTERNAL_SECRET_COUNT"
+echo "    - DataVolumes: $DATA_VOLUME_COUNT"
+echo "    - DataSources: $DATA_SOURCE_COUNT"
 
-if [[ $VM_COUNT -eq 0 && $SERVICE_COUNT -eq 0 && $ROUTE_COUNT -eq 0 && $EXTERNAL_SECRET_COUNT -eq 0 ]]; then
-	echo "  ⚠️  Warning: No VMs, Services, Routes, or ExternalSecrets found in workload manifest"
-	echo "  Note: These resources are optional - will proceed with applying os-images and workload manifests anyway"
+if [[ $VM_COUNT -eq 0 && $SERVICE_COUNT -eq 0 && $ROUTE_COUNT -eq 0 && $EXTERNAL_SECRET_COUNT -eq 0 && $DATA_VOLUME_COUNT -eq 0 && $DATA_SOURCE_COUNT -eq 0 ]]; then
+	echo "  ⚠️  Warning: No VMs, Services, Routes, ExternalSecrets, DataVolumes, or DataSources found in helm template"
+	echo "  Note: These resources are optional - will proceed with applying the template anyway"
 fi
 
 # Build workload resources list (kind|name|namespace) for existence checks on target cluster
@@ -527,8 +533,8 @@ if [[ -s "$WORK_DIR/workload-resources-list.txt" ]]; then
 		fi
 	done <"$WORK_DIR/workload-resources-list.txt"
 else
-	echo "  ⚠️  Warning: No VMs, Services, Routes, or ExternalSecrets found in workload manifest"
-	echo "  Note: These resources are optional - will proceed with applying os-images and workload manifests if needed"
+	echo "  ⚠️  Warning: No VMs, Services, Routes, ExternalSecrets, DataVolumes, or DataSources found in helm template"
+	echo "  Note: These resources are optional - will proceed with applying the template"
 	ALL_EXIST=false
 fi
 
@@ -970,6 +976,16 @@ PY
 			echo "    ✅ Yes (Routes)"
 		else
 			echo "    ❌ No (Routes)"
+		fi
+		if oc auth can-i create datavolumes -n "$VM_NAMESPACE" &>/dev/null; then
+			echo "    ✅ Yes (DataVolumes)"
+		else
+			echo "    ❌ No (DataVolumes)"
+		fi
+		if oc auth can-i create datasources -n "$VM_NAMESPACE" &>/dev/null; then
+			echo "    ✅ Yes (DataSources)"
+		else
+			echo "    ❌ No (DataSources)"
 		fi
 		echo ""
 		echo "  ========================================"

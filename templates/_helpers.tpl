@@ -178,3 +178,28 @@
 {{- $odf := .Values.odf | default dict -}}
 {{- if not (hasKey $odf "postInstallFixesEnabled") -}}1{{- else if index $odf "postInstallFixesEnabled" -}}1{{- else -}}0{{- end -}}
 {{- end -}}
+
+{{/* Stable checksum of packaged ansible/ (excludes dotfiles). Drives CM + Job drift on chart updates. */}}
+{{- define "rdr.ansibleConfigChecksum" -}}
+{{- $paths := list -}}
+{{- range $path, $_ := .Files.Glob "ansible/**" -}}
+{{- if not (hasPrefix "ansible/." $path) -}}
+{{- $paths = append $paths $path -}}
+{{- end -}}
+{{- end -}}
+{{- $buf := "" -}}
+{{- range $path := $paths | sortAlpha -}}
+{{- $buf = printf "%s\n%s\n%s" $buf $path ($.Files.Get $path) -}}
+{{- end -}}
+{{- $buf | sha256sum -}}
+{{- end -}}
+
+{{/* Argo CD sync-options for regionaldr-ansible (see values ansible.configMapArgoSyncOptions). */}}
+{{- define "rdr.ansibleConfigMapArgoSyncOptions" -}}
+{{- .Values.ansible.configMapArgoSyncOptions | default "Prune=false,ServerSideApply=true" -}}
+{{- end -}}
+
+{{/* Pod template annotation: keep ansible Jobs in sync with regionaldr-ansible content. */}}
+{{- define "rdr.ansibleJobPodAnnotations" -}}
+checksum/regionaldr-ansible: {{ include "rdr.ansibleConfigChecksum" . | quote }}
+{{- end -}}
