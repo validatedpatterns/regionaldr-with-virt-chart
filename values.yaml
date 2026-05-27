@@ -98,6 +98,8 @@ drpc:
 
 ansible:
   containerImage: quay.io/validatedpatterns/utility-container:latest
+  # Ansible-playbook verbosity (0-4). Jobs using rdr.ansibleBootstrap export ANSIBLE_VERBOSITY when > 0.
+  verbosity: 0
 
 # When odf.postInstallFixesEnabled is true: odf-dr-prerequisites + odf-ramen-trusted-ca jobs/RBAC below.
 # Post-sync job odf-ramen-trusted-ca (wave 9): CA from hub cluster-proxy-ca-bundle; waits for Ramen s3StoreProfiles.
