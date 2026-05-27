@@ -1,0 +1,20 @@
+suite: ansible ConfigMap
+templates:
+  - ansible-configmap.yaml
+tests:
+  - it: renders regionaldr-ansible at sync wave -1 with content checksum
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: regionaldr-ansible
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-1"
+      - isNotEmpty:
+          path: metadata.annotations["regionaldr-with-virt/ansible-checksum"]
+      - matchRegex:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          pattern: ServerSideApply=true
+      - notExists:
+          path: data[".ansible-lint"]

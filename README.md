@@ -14,6 +14,7 @@ v0.1.0 - Initial release
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| ansible.configMapArgoSyncOptions | string | `"Prune=false,ServerSideApply=true"` |  |
 | ansible.containerImage | string | `"quay.io/validatedpatterns/utility-container:latest"` |  |
 | ansible.verbosity | int | `0` |  |
 | boutique.chartName | string | `"boutique"` |  |
