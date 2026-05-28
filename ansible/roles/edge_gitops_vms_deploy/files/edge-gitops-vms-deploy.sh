@@ -122,6 +122,25 @@ get_cluster_kubeconfig_to_file() {
 	return 1
 }
 
+# Function to check if any workload resource from workload-resources-list.txt exists on the cluster (using given kubeconfig)
+# Returns 0 if at least one resource exists, 1 otherwise
+any_resource_exists_on_cluster() {
+	local kubeconfig_path="$1"
+	if [[ ! -s "$WORK_DIR/workload-resources-list.txt" ]]; then
+		return 1
+	fi
+	while IFS='|' read -r kind name namespace; do
+		if [[ -z "$kind" || -z "$name" ]]; then
+			continue
+		fi
+		local check_namespace="${namespace:-$VM_NAMESPACE}"
+		if KUBECONFIG="$kubeconfig_path" oc get "$kind" "$name" -n "$check_namespace" -o jsonpath='{.metadata.name}' &>/dev/null; then
+			return 0
+		fi
+	done <"$WORK_DIR/workload-resources-list.txt"
+	return 1
+}
+
 split_helm_manifests() {
 	local input="$1"
 	local os_images_out="$2"
@@ -204,7 +223,8 @@ check_os_images_complete() {
 			echo "    ❌ $kind/$name does not exist"
 			all_exist=false
 		fi
-	done < <(python3 - "$manifest" <<'PY'
+	done < <(
+		python3 - "$manifest" <<'PY'
 import sys, yaml
 
 with open(sys.argv[1], encoding="utf-8") as fh:
@@ -218,7 +238,7 @@ with open(sys.argv[1], encoding="utf-8") as fh:
         if kind and name:
             print(f"{kind}|{name}|{ns}")
 PY
-)
+	)
 
 	if [[ "$all_exist" == "true" ]]; then
 		return 0
@@ -469,6 +489,31 @@ if [[ -s "$WORK_DIR/workload-manifest.yaml" ]]; then
 else
 	: >"$WORK_DIR/workload-resources-list.txt"
 fi
+
+# Step 3b: Check both primary and secondary for existing workload resources — skip deploy if found on either (avoid race during failover/Argo sync)
+echo ""
+echo "Step 3b: Checking primary and secondary clusters for existing resources (skip deploy if found on either)..."
+RESOURCES_FOUND_ON_OTHER_CLUSTER=false
+for cluster in "$PRIMARY_CLUSTER" "$SECONDARY_CLUSTER"; do
+	kubeconfig_file="$WORK_DIR/kubeconfig-$cluster.yaml"
+	if get_cluster_kubeconfig_to_file "$cluster" "$kubeconfig_file"; then
+		if any_resource_exists_on_cluster "$kubeconfig_file"; then
+			echo "  ✅ At least one workload resource (VM/Service/Route/ExternalSecret) already exists on $cluster"
+			RESOURCES_FOUND_ON_OTHER_CLUSTER=true
+			break
+		fi
+		echo "  No workload resources found on $cluster"
+	else
+		echo "  ⚠️  Could not get kubeconfig for $cluster — skipping check for this cluster"
+	fi
+done
+if [[ "$RESOURCES_FOUND_ON_OTHER_CLUSTER" == "true" ]]; then
+	echo ""
+	echo "  Workload resources already exist on primary or secondary (failover or Argo sync may be in progress)."
+	echo "  Skipping deployment to avoid race conditions."
+	exit 0
+fi
+echo "  No workload resources found on primary or secondary — will proceed with placement target check and deploy if needed."
 
 # Get kubeconfig for target cluster (must succeed so we do not deploy to hub by mistake)
 if ! get_target_cluster_kubeconfig "$TARGET_CLUSTER"; then
@@ -826,7 +871,8 @@ ${APPLY_STDERR}"
 						VERIFY_SUCCESS=false
 					fi
 				fi
-			done < <(python3 - "$WORK_DIR/os-images-manifest.yaml" <<'PY'
+			done < <(
+				python3 - "$WORK_DIR/os-images-manifest.yaml" <<'PY'
 import sys, yaml
 
 with open(sys.argv[1], encoding="utf-8") as fh:
@@ -840,7 +886,7 @@ with open(sys.argv[1], encoding="utf-8") as fh:
         if kind and name:
             print(f"{kind}|{name}|{ns}")
 PY
-)
+			)
 		fi
 
 		if [[ -s "$WORK_DIR/workload-resources-list.txt" ]]; then
