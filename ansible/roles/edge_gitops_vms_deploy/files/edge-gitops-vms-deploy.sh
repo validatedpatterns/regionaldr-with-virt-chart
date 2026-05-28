@@ -31,6 +31,7 @@ HELM_CHART_URL="https://github.com/validatedpatterns/helm-charts/releases/downlo
 WORK_DIR="/tmp/edge-gitops-vms"
 VALUES_FILE="$WORK_DIR/values-egv-dr.yaml"
 VM_NAMESPACE="gitops-vms"
+OS_IMAGES_NAMESPACE="${OS_IMAGES_NAMESPACE:-openshift-virtualization-os-images}"
 DRPC_NAMESPACE="openshift-dr-ops"
 DRPC_NAME="gitops-vm-protection"
 PLACEMENT_NAME="gitops-vm-protection-placement-1"
@@ -121,21 +122,127 @@ get_cluster_kubeconfig_to_file() {
 	return 1
 }
 
-# Function to check if any resource from resources-list.txt exists on the cluster (using given kubeconfig)
+# Function to check if any workload resource from workload-resources-list.txt exists on the cluster (using given kubeconfig)
 # Returns 0 if at least one resource exists, 1 otherwise
 any_resource_exists_on_cluster() {
 	local kubeconfig_path="$1"
-	if [[ ! -s "$WORK_DIR/resources-list.txt" ]]; then
+	if [[ ! -s "$WORK_DIR/workload-resources-list.txt" ]]; then
 		return 1
 	fi
 	while IFS='|' read -r kind name namespace; do
 		if [[ -z "$kind" || -z "$name" ]]; then
 			continue
 		fi
-		if KUBECONFIG="$kubeconfig_path" oc get "$kind" "$name" -n "$VM_NAMESPACE" -o jsonpath='{.metadata.name}' &>/dev/null; then
+		local check_namespace="${namespace:-$VM_NAMESPACE}"
+		if KUBECONFIG="$kubeconfig_path" oc get "$kind" "$name" -n "$check_namespace" -o jsonpath='{.metadata.name}' &>/dev/null; then
 			return 0
 		fi
-	done <"$WORK_DIR/resources-list.txt"
+	done <"$WORK_DIR/workload-resources-list.txt"
+	return 1
+}
+
+split_helm_manifests() {
+	local input="$1"
+	local os_images_out="$2"
+	local workload_out="$3"
+	python3 - "$input" "$os_images_out" "$workload_out" "$OS_IMAGES_NAMESPACE" <<'PY'
+import sys, yaml
+
+input_path, os_out, wl_out, os_ns = sys.argv[1:5]
+os_docs, wl_docs = [], []
+
+with open(input_path, encoding="utf-8") as fh:
+    for doc in yaml.safe_load_all(fh):
+        if not doc:
+            continue
+        kind = doc.get("kind", "")
+        meta = doc.get("metadata") or {}
+        ns = meta.get("namespace", "")
+        name = meta.get("name", "")
+
+        if kind in ("DataVolume", "DataSource") and ns == os_ns:
+            os_docs.append(doc)
+        elif kind == "ExternalSecret" and ns == os_ns:
+            os_docs.append(doc)
+        elif kind in ("ClusterRole", "ClusterRoleBinding") and "os-images.kubevirt.io" in name:
+            os_docs.append(doc)
+        else:
+            wl_docs.append(doc)
+
+def write(path, docs):
+    with open(path, "w", encoding="utf-8") as fh:
+        yaml.safe_dump_all(docs, fh, default_flow_style=False)
+
+write(os_out, os_docs)
+write(wl_out, wl_docs)
+PY
+}
+
+apply_os_images_on_target() {
+	local manifest="$WORK_DIR/os-images-manifest.yaml"
+
+	if [[ ! -s "$manifest" ]]; then
+		echo "  No os-images manifest to apply (empty or missing)"
+		return 0
+	fi
+
+	echo "  Ensuring namespace $OS_IMAGES_NAMESPACE exists on target cluster..."
+	oc create namespace "$OS_IMAGES_NAMESPACE" --dry-run=client -o yaml | oc apply -f -
+
+	echo "  Applying os-images manifest on target cluster (namespace: $OS_IMAGES_NAMESPACE)..."
+	if ! oc apply -f "$manifest"; then
+		echo "  ❌ Error: Failed to apply os-images manifest on target cluster"
+		return 1
+	fi
+	echo "  ✅ os-images manifest applied on target cluster"
+	return 0
+}
+
+# Returns 0 if all os-images resources exist on target, 1 if any are missing
+check_os_images_complete() {
+	local manifest="$WORK_DIR/os-images-manifest.yaml"
+	local all_exist=true
+
+	if [[ ! -s "$manifest" ]]; then
+		return 0
+	fi
+
+	while IFS='|' read -r kind name namespace; do
+		if [[ -z "$kind" || -z "$name" ]]; then
+			continue
+		fi
+		check_namespace="${namespace:-}"
+		if [[ -z "$check_namespace" ]]; then
+			echo "  Checking os-images $kind/$name (cluster-scoped)"
+		else
+			echo "  Checking os-images $kind/$name in namespace: $check_namespace"
+		fi
+		if check_resource_exists "" "$kind" "$check_namespace" "$name"; then
+			echo "    ✅ $kind/$name exists"
+		else
+			echo "    ❌ $kind/$name does not exist"
+			all_exist=false
+		fi
+	done < <(
+		python3 - "$manifest" <<'PY'
+import sys, yaml
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    for doc in yaml.safe_load_all(fh):
+        if not doc:
+            continue
+        kind = doc.get("kind", "")
+        meta = doc.get("metadata") or {}
+        ns = meta.get("namespace", "")
+        name = meta.get("name", "")
+        if kind and name:
+            print(f"{kind}|{name}|{ns}")
+PY
+	)
+
+	if [[ "$all_exist" == "true" ]]; then
+		return 0
+	fi
 	return 1
 }
 
@@ -260,9 +367,17 @@ else
 	fi
 fi
 
-# Step 3: Extract workload and CDI resources from helm output
 echo ""
-echo "Step 3: Extracting VMs, Services, Routes, ExternalSecrets, DataVolumes, and DataSources from helm template..."
+echo "Step 2b: Splitting helm output into os-images and workload manifests..."
+split_helm_manifests "$WORK_DIR/helm-output.yaml" \
+	"$WORK_DIR/os-images-manifest.yaml" \
+	"$WORK_DIR/workload-manifest.yaml"
+echo "  os-images manifest: $(grep -c '^kind:' "$WORK_DIR/os-images-manifest.yaml" 2>/dev/null || echo 0) resources"
+echo "  workload manifest: $(grep -c '^kind:' "$WORK_DIR/workload-manifest.yaml" 2>/dev/null || echo 0) resources"
+
+# Step 3: Extract workload resources (VMs, Services, Routes, ExternalSecrets) from workload manifest
+echo ""
+echo "Step 3: Extracting VMs, Services, Routes, ExternalSecrets, DataVolumes, and DataSources from workload manifest..."
 
 # Extract resources using yq or awk
 if command -v yq &>/dev/null; then
@@ -280,7 +395,7 @@ else
         print
       }
     }
-  ' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
+  ' "$WORK_DIR/workload-manifest.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
 fi
 
 # Alternative: Use grep and awk to extract resources
@@ -301,10 +416,10 @@ if [[ ! -s "$WORK_DIR/resources-to-check.yaml" ]]; then
         print "---" resource
       }
     }
-  ' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
+  ' "$WORK_DIR/workload-manifest.yaml" >"$WORK_DIR/resources-to-check.yaml" 2>/dev/null || true
 fi
 
-# Count resources (remove any newlines/whitespace)
+# Count workload resources (remove any newlines/whitespace)
 VM_COUNT=$(grep -c "^kind: VirtualMachine" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
 SERVICE_COUNT=$(grep -c "^kind: Service" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
 ROUTE_COUNT=$(grep -c "^kind: Route" "$WORK_DIR/resources-to-check.yaml" 2>/dev/null | tr -d ' \n' || echo "0")
@@ -320,7 +435,7 @@ EXTERNAL_SECRET_COUNT=${EXTERNAL_SECRET_COUNT:-0}
 DATA_VOLUME_COUNT=${DATA_VOLUME_COUNT:-0}
 DATA_SOURCE_COUNT=${DATA_SOURCE_COUNT:-0}
 
-echo "  Found resources in template:"
+echo "  Found workload resources in template:"
 echo "    - VirtualMachines: $VM_COUNT"
 echo "    - Services: $SERVICE_COUNT"
 echo "    - Routes: $ROUTE_COUNT"
@@ -333,8 +448,8 @@ if [[ $VM_COUNT -eq 0 && $SERVICE_COUNT -eq 0 && $ROUTE_COUNT -eq 0 && $EXTERNAL
 	echo "  Note: These resources are optional - will proceed with applying the template anyway"
 fi
 
-# Build resources list (kind|name|namespace) for existence checks on each cluster
-if [[ -s "$WORK_DIR/helm-output.yaml" ]]; then
+# Build workload resources list (kind|name|namespace) for existence checks on target cluster
+if [[ -s "$WORK_DIR/workload-manifest.yaml" ]]; then
 	awk '
     BEGIN { 
       RS="---"
@@ -362,17 +477,20 @@ if [[ -s "$WORK_DIR/helm-output.yaml" ]]; then
             namespace=parts[2]
           }
         }
-        if (kind != "" && name != "") {
+        if (namespace == "" && kind !~ /DataVolume|DataSource/) {
+          namespace = "gitops-vms"
+        }
+        if (kind != "" && name != "" && kind ~ /^(VirtualMachine|Service|Route|ExternalSecret)$/) {
           print kind "|" name "|" namespace
         }
       }
     }
-  ' "$WORK_DIR/helm-output.yaml" >"$WORK_DIR/resources-list.txt"
+  ' "$WORK_DIR/workload-manifest.yaml" >"$WORK_DIR/workload-resources-list.txt"
 else
-	: >"$WORK_DIR/resources-list.txt"
+	: >"$WORK_DIR/workload-resources-list.txt"
 fi
 
-# Step 3b: Check both primary and secondary for existing resources — skip deploy if found on either (avoid race during failover/Argo sync)
+# Step 3b: Check both primary and secondary for existing workload resources — skip deploy if found on either (avoid race during failover/Argo sync)
 echo ""
 echo "Step 3b: Checking primary and secondary clusters for existing resources (skip deploy if found on either)..."
 RESOURCES_FOUND_ON_OTHER_CLUSTER=false
@@ -380,22 +498,22 @@ for cluster in "$PRIMARY_CLUSTER" "$SECONDARY_CLUSTER"; do
 	kubeconfig_file="$WORK_DIR/kubeconfig-$cluster.yaml"
 	if get_cluster_kubeconfig_to_file "$cluster" "$kubeconfig_file"; then
 		if any_resource_exists_on_cluster "$kubeconfig_file"; then
-			echo "  ✅ At least one resource (VM/Service/Route/ExternalSecret/DataVolume/DataSource) already exists on $cluster"
+			echo "  ✅ At least one workload resource (VM/Service/Route/ExternalSecret) already exists on $cluster"
 			RESOURCES_FOUND_ON_OTHER_CLUSTER=true
 			break
 		fi
-		echo "  No resources found on $cluster"
+		echo "  No workload resources found on $cluster"
 	else
 		echo "  ⚠️  Could not get kubeconfig for $cluster — skipping check for this cluster"
 	fi
 done
 if [[ "$RESOURCES_FOUND_ON_OTHER_CLUSTER" == "true" ]]; then
 	echo ""
-	echo "  Resources already exist on primary or secondary (failover or Argo sync may be in progress)."
+	echo "  Workload resources already exist on primary or secondary (failover or Argo sync may be in progress)."
 	echo "  Skipping deployment to avoid race conditions."
 	exit 0
 fi
-echo "  No resources found on primary or secondary — will proceed with placement target check and deploy if needed."
+echo "  No workload resources found on primary or secondary — will proceed with placement target check and deploy if needed."
 
 # Get kubeconfig for target cluster (must succeed so we do not deploy to hub by mistake)
 if ! get_target_cluster_kubeconfig "$TARGET_CLUSTER"; then
@@ -431,17 +549,25 @@ fi
 
 # Step 4: Check if resources already exist on the target (placement) cluster
 echo ""
-echo "Step 4: Checking if resources already exist on target cluster ($TARGET_CLUSTER)..."
+echo "Step 4: Checking if os-images and workload resources already exist on target cluster ($TARGET_CLUSTER)..."
 
 ALL_EXIST=true
+OS_IMAGES_COMPLETE=true
 MISSING_RESOURCES=()
 
-if [[ -s "$WORK_DIR/resources-list.txt" ]]; then
+echo "  Checking os-images resources in namespace $OS_IMAGES_NAMESPACE..."
+if ! check_os_images_complete; then
+	OS_IMAGES_COMPLETE=false
+	ALL_EXIST=false
+fi
+
+if [[ -s "$WORK_DIR/workload-resources-list.txt" ]]; then
+	echo "  Checking workload resources..."
 	while IFS='|' read -r kind name namespace; do
 		if [[ -z "$kind" || -z "$name" ]]; then
 			continue
 		fi
-		check_namespace="$VM_NAMESPACE"
+		check_namespace="${namespace:-$VM_NAMESPACE}"
 		echo "  Checking $kind/$name in namespace: $check_namespace"
 		if check_resource_exists "" "$kind" "$check_namespace" "$name"; then
 			echo "    ✅ $kind/$name exists in namespace $check_namespace"
@@ -450,23 +576,23 @@ if [[ -s "$WORK_DIR/resources-list.txt" ]]; then
 			ALL_EXIST=false
 			MISSING_RESOURCES+=("$kind/$name in namespace $check_namespace")
 		fi
-	done <"$WORK_DIR/resources-list.txt"
+	done <"$WORK_DIR/workload-resources-list.txt"
 else
 	echo "  ⚠️  Warning: No VMs, Services, Routes, ExternalSecrets, DataVolumes, or DataSources found in helm template"
 	echo "  Note: These resources are optional - will proceed with applying the template"
 	ALL_EXIST=false
 fi
 
-# Step 5: Apply template if resources don't exist
+# Step 5: Apply manifests if resources don't exist
 echo ""
-if [[ "$ALL_EXIST" == "true" && ${#MISSING_RESOURCES[@]} -eq 0 ]]; then
-	echo "Step 5: All resources already exist"
-	echo "  ✅ VMs, Services, Routes, ExternalSecrets, DataVolumes, and DataSources are already deployed"
-	echo "  Exiting successfully without applying template"
+if [[ "$ALL_EXIST" == "true" && "$OS_IMAGES_COMPLETE" == "true" && ${#MISSING_RESOURCES[@]} -eq 0 ]]; then
+	echo "Step 5: All os-images and workload resources already exist"
+	echo "  ✅ os-images and workload resources are already deployed on target cluster $TARGET_CLUSTER"
+	echo "  Exiting successfully without applying manifests"
 	exit 0
 else
-	echo "Step 5: Applying helm template..."
-	echo "  Some resources are missing, applying template..."
+	echo "Step 5: Applying os-images and workload manifests..."
+	echo "  Some resources are missing, applying manifests on target cluster $TARGET_CLUSTER..."
 
 	if [[ ${#MISSING_RESOURCES[@]} -gt 0 ]]; then
 		echo "  Missing resources:"
@@ -547,6 +673,11 @@ else
 	fi
 	echo "  ✅ YAML syntax is valid"
 
+	split_helm_manifests "$TEMPLATE_OUTPUT_FILE" \
+		"$WORK_DIR/os-images-manifest.yaml" \
+		"$WORK_DIR/workload-manifest.yaml"
+	echo "  Split manifests: os-images=$(grep -c '^kind:' "$WORK_DIR/os-images-manifest.yaml" 2>/dev/null || echo 0), workload=$(grep -c '^kind:' "$WORK_DIR/workload-manifest.yaml" 2>/dev/null || echo 0) resources"
+
 	# Report what got rendered
 	echo "  ✅ Helm template rendered successfully"
 	echo "  Template file: $TEMPLATE_OUTPUT_FILE"
@@ -584,7 +715,7 @@ else
 	fi
 
 	echo ""
-	echo "  Applying template to namespace: $VM_NAMESPACE..."
+	echo "  Applying os-images and workload manifests on target cluster $TARGET_CLUSTER..."
 
 	# Require that we are using the target cluster's kubeconfig (never apply to hub)
 	if [[ "${KUBECONFIG:-}" != "$WORK_DIR/target-kubeconfig.yaml" || ! -f "$WORK_DIR/target-kubeconfig.yaml" ]]; then
@@ -595,24 +726,30 @@ else
 	echo "  Using kubeconfig: $KUBECONFIG (target: $TARGET_CLUSTER)"
 	echo "  Current cluster context: $CURRENT_CLUSTER"
 
-	# Now apply the template and capture both stdout, stderr, and exit code
-	# The oc apply will use the KUBECONFIG set earlier (target cluster's kubeconfig)
-	# Use temporary files to capture stdout and stderr separately for better debugging
+	if ! apply_os_images_on_target; then
+		exit 1
+	fi
+
+	# Apply workload manifest and capture both stdout, stderr, and exit code
 	APPLY_STDOUT_FILE="$WORK_DIR/oc-apply-stdout.log"
 	APPLY_STDERR_FILE="$WORK_DIR/oc-apply-stderr.log"
 
-	echo "  Executing: oc apply -n $VM_NAMESPACE -f $TEMPLATE_OUTPUT_FILE"
+	echo "  Executing: oc apply -n $VM_NAMESPACE -f $WORK_DIR/workload-manifest.yaml"
 
 	# Temporarily disable exit on error to ensure we capture output even if oc apply fails
 	set +e
 
-	# Capture stdout and stderr separately, then capture exit code
 	echo "  Running oc apply command..."
-	echo "  Command: oc apply -n $VM_NAMESPACE -f $TEMPLATE_OUTPUT_FILE"
-
-	# Run oc apply and capture output
-	oc apply -n "$VM_NAMESPACE" -f "$TEMPLATE_OUTPUT_FILE" >"$APPLY_STDOUT_FILE" 2>"$APPLY_STDERR_FILE"
-	APPLY_EXIT_CODE=$?
+	if [[ -s "$WORK_DIR/workload-manifest.yaml" ]]; then
+		echo "  Command: oc apply -n $VM_NAMESPACE -f $WORK_DIR/workload-manifest.yaml"
+		oc apply -n "$VM_NAMESPACE" -f "$WORK_DIR/workload-manifest.yaml" >"$APPLY_STDOUT_FILE" 2>"$APPLY_STDERR_FILE"
+		APPLY_EXIT_CODE=$?
+	else
+		echo "  No workload manifest to apply (empty or missing)"
+		: >"$APPLY_STDOUT_FILE"
+		: >"$APPLY_STDERR_FILE"
+		APPLY_EXIT_CODE=0
+	fi
 
 	# Immediately flush output to ensure it's written
 	sync 2>/dev/null || true
@@ -699,10 +836,10 @@ ${APPLY_STDERR}"
 	echo "  oc apply exit code: $APPLY_EXIT_CODE"
 
 	if [[ $APPLY_EXIT_CODE -eq 0 ]]; then
-		echo "  ✅ Helm template applied successfully to namespace $VM_NAMESPACE"
+		echo "  ✅ os-images and workload manifests applied on target cluster $TARGET_CLUSTER"
 		echo ""
 		if [[ -n "$APPLY_OUTPUT" ]]; then
-			echo "  Apply output:"
+			echo "  Workload apply output:"
 			echo "$APPLY_OUTPUT" | head -30 | sed 's/^/    /'
 			if [[ $(echo "$APPLY_OUTPUT" | wc -l) -gt 30 ]]; then
 				echo "    ... (output truncated, showing first 30 lines)"
@@ -711,24 +848,61 @@ ${APPLY_STDERR}"
 
 		# Verify resources were created
 		echo ""
-		echo "Step 6: Verifying deployed resources..."
+		echo "Step 6: Verifying os-images and workload resources on target cluster ($TARGET_CLUSTER)..."
 		VERIFY_SUCCESS=true
 
-		if [[ -s "$WORK_DIR/resources-list.txt" ]]; then
+		if [[ -s "$WORK_DIR/os-images-manifest.yaml" ]]; then
 			while IFS='|' read -r kind name namespace; do
 				if [[ -n "$kind" && -n "$name" ]]; then
-					# All checked resources should be in gitops-vms namespace
-					check_namespace="$VM_NAMESPACE"
-
-					sleep 1 # Give resources a moment to be created
+					check_namespace="${namespace:-}"
+					sleep 1
 					if check_resource_exists "" "$kind" "$check_namespace" "$name"; then
-						echo "  ✅ Verified: $kind/$name exists in namespace $check_namespace"
+						if [[ -z "$check_namespace" ]]; then
+							echo "  ✅ Verified os-images: $kind/$name (cluster-scoped)"
+						else
+							echo "  ✅ Verified os-images: $kind/$name exists in namespace $check_namespace"
+						fi
 					else
-						echo "  ⚠️  Warning: $kind/$name not found in namespace $check_namespace after apply (may still be creating)"
+						if [[ -z "$check_namespace" ]]; then
+							echo "  ⚠️  Warning: os-images $kind/$name not found (cluster-scoped) after apply (may still be creating)"
+						else
+							echo "  ⚠️  Warning: os-images $kind/$name not found in namespace $check_namespace after apply (may still be creating)"
+						fi
 						VERIFY_SUCCESS=false
 					fi
 				fi
-			done <"$WORK_DIR/resources-list.txt"
+			done < <(
+				python3 - "$WORK_DIR/os-images-manifest.yaml" <<'PY'
+import sys, yaml
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    for doc in yaml.safe_load_all(fh):
+        if not doc:
+            continue
+        kind = doc.get("kind", "")
+        meta = doc.get("metadata") or {}
+        ns = meta.get("namespace", "")
+        name = meta.get("name", "")
+        if kind and name:
+            print(f"{kind}|{name}|{ns}")
+PY
+			)
+		fi
+
+		if [[ -s "$WORK_DIR/workload-resources-list.txt" ]]; then
+			while IFS='|' read -r kind name namespace; do
+				if [[ -n "$kind" && -n "$name" ]]; then
+					check_namespace="${namespace:-$VM_NAMESPACE}"
+
+					sleep 1
+					if check_resource_exists "" "$kind" "$check_namespace" "$name"; then
+						echo "  ✅ Verified workload: $kind/$name exists in namespace $check_namespace"
+					else
+						echo "  ⚠️  Warning: workload $kind/$name not found in namespace $check_namespace after apply (may still be creating)"
+						VERIFY_SUCCESS=false
+					fi
+				fi
+			done <"$WORK_DIR/workload-resources-list.txt"
 		fi
 
 		if [[ "$VERIFY_SUCCESS" == "true" ]]; then
@@ -867,7 +1041,7 @@ ${APPLY_STDERR}"
 		echo "  2. Inspect the template file: $TEMPLATE_OUTPUT_FILE"
 		echo "  3. Verify namespace exists: oc get namespace $VM_NAMESPACE"
 		echo "  4. Check permissions: oc auth can-i create virtualmachines -n $VM_NAMESPACE"
-		echo "  5. Try applying manually: oc apply -n $VM_NAMESPACE -f $TEMPLATE_OUTPUT_FILE"
+		echo "  5. Try applying manually: oc apply -f $WORK_DIR/os-images-manifest.yaml && oc apply -n $VM_NAMESPACE -f $WORK_DIR/workload-manifest.yaml"
 		echo ""
 		exit 1
 	fi
