@@ -1,9 +1,10 @@
 {{- if eq "1" (include "rdr.odfPostInstallFixesEnabled" . | trim) }}
+# Workloads run in clusterCaMgt.namespace; cluster-proxy-ca-bundle remains in openshift-config.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: odf-ramen-trusted-ca
-  namespace: open-cluster-management
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
   labels:
     app.kubernetes.io/name: odf-ramen-trusted-ca
     app.kubernetes.io/component: ramen-hub-ca
@@ -41,5 +42,5 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: odf-ramen-trusted-ca
-  namespace: open-cluster-management
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
 {{- end }}

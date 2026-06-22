@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: odf-dr-prerequisites-checker
-  namespace: open-cluster-management
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
   labels:
     app.kubernetes.io/name: odf-dr-prerequisites
     app.kubernetes.io/component: health-check
@@ -80,5 +80,5 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: odf-dr-prerequisites-checker
-  namespace: open-cluster-management
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
 {{- end }}

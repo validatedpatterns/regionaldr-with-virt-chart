@@ -10,8 +10,20 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
     argocd.argoproj.io/sync-options: Prune=false
 data:
-{{- range $path, $content := .Files.Glob "ansible/**" }}
-  {{- $key := $path | trimPrefix "ansible/" | replace "/" "__" }}
-  {{ $key }}: |
-{{ $content | toString | nindent 4 }}
+{{ include "rdr.regionaldrAnsibleConfigMapData" . }}
+{{- if eq "1" (include "rdr.odfPostInstallFixesEnabled" . | trim) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: regionaldr-ansible
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
+  labels:
+    app.kubernetes.io/name: regionaldr-ansible
+    app.kubernetes.io/component: ca-workloads
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: Prune=false
+data:
+{{ include "rdr.regionaldrAnsibleConfigMapData" . }}
 {{- end }}

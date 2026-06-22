@@ -3,6 +3,13 @@
 # provision attempt; the submariner SG tag job uses the managed cluster Infrastructure CR instead.
 byoc: false
 
+# Namespace for ODF SSL / CA post-install Jobs and RBAC (not cluster-proxy-ca-bundle).
+clusterCaMgt:
+  # -- Namespace for ODF CA prerequisites and Ramen trusted-CA workloads.
+  namespace: cluster-ca-mgt
+  # -- Create clusterCaMgt.namespace when installing the chart.
+  createNamespace: false
+
 global:
   clusterDomain: cluster.example.com
   # Pattern name; target application namespace = global.pattern-main.clusterGroupName
