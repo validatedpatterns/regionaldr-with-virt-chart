@@ -31,13 +31,13 @@ main:
 
 # Edge GitOps VMs deployment (script and helm chart)
 edgeGitopsVms:
-  chartVersion: "0.3.5"
+  chartVersion: "0.5.0"
 
 # Optional: install boutique from charts.validatedpatterns.io on the same cluster as edge-gitops-vms (PostSync job).
 boutique:
   deploy: false
   namespace: boutique
-  chartVersion: "0.0.4"
+  chartVersion: "0.0.9"
   chartName: boutique
   helmRepoUrl: https://charts.validatedpatterns.io
   helmRepoAlias: validatedpatterns
@@ -105,6 +105,11 @@ drpc:
 
 ansible:
   containerImage: quay.io/validatedpatterns/utility-container:latest
+  # Ansible-playbook verbosity (0-4). Jobs using rdr.ansibleBootstrap export ANSIBLE_VERBOSITY when > 0.
+  verbosity: 0
+  # Argo CD resource sync-options for regionaldr-ansible. ServerSideApply converges large CM data;
+  # add Replace=true only if your Argo CD server allows sync replace (often disabled on Argo CD v3).
+  configMapArgoSyncOptions: Prune=false,ServerSideApply=true
 
 # When odf.postInstallFixesEnabled is true: odf-dr-prerequisites + odf-ramen-trusted-ca jobs/RBAC below.
 # Post-sync job odf-ramen-trusted-ca (wave 9): CA from hub cluster-proxy-ca-bundle; waits for Ramen s3StoreProfiles.

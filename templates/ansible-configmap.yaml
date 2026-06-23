@@ -7,8 +7,10 @@ metadata:
   labels:
     app.kubernetes.io/name: regionaldr-ansible
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
-    argocd.argoproj.io/sync-options: Prune=false
+    # Wave -1: before wave 0 cluster resources. When OutOfSync, must converge (see configMapArgoSyncOptions).
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: {{ include "rdr.ansibleConfigMapArgoSyncOptions" . | quote }}
+    regionaldr-with-virt/ansible-checksum: {{ include "rdr.ansibleConfigChecksum" . | quote }}
 data:
 {{ include "rdr.regionaldrAnsibleConfigMapData" . }}
 {{- if eq "1" (include "rdr.odfPostInstallFixesEnabled" . | trim) }}
@@ -26,4 +28,15 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=false
 data:
 {{ include "rdr.regionaldrAnsibleConfigMapData" . }}
+{{- $paths := list }}
+{{- range $path, $_ := .Files.Glob "ansible/**" }}
+{{- if not (hasPrefix "ansible/." $path) }}
+{{- $paths = append $paths $path }}
+{{- end }}
+{{- end }}
+{{- range $path := $paths | sortAlpha }}
+  {{- $key := $path | trimPrefix "ansible/" | replace "/" "__" }}
+  {{- $body := $.Files.Get $path | toString | trimSuffix "\n" }}
+  {{ $key }}: |
+{{ $body | nindent 4 }}
 {{- end }}

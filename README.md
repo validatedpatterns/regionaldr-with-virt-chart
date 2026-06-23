@@ -14,9 +14,11 @@ v0.1.0 - Initial release
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| ansible.configMapArgoSyncOptions | string | `"Prune=false,ServerSideApply=true"` |  |
 | ansible.containerImage | string | `"quay.io/validatedpatterns/utility-container:latest"` |  |
+| ansible.verbosity | int | `0` |  |
 | boutique.chartName | string | `"boutique"` |  |
-| boutique.chartVersion | string | `"0.0.4"` |  |
+| boutique.chartVersion | string | `"0.0.9"` |  |
 | boutique.deploy | bool | `false` |  |
 | boutique.helmRepoAlias | string | `"validatedpatterns"` |  |
 | boutique.helmRepoUrl | string | `"https://charts.validatedpatterns.io"` |  |
@@ -41,7 +43,7 @@ v0.1.0 - Initial release
 | drpc.preferredCluster | string | `"ocp-primary"` |  |
 | drpc.protectedNamespaces[0] | string | `"gitops-vms"` |  |
 | drpc.pvcSelector | object | `{}` |  |
-| edgeGitopsVms.chartVersion | string | `"0.3.5"` |  |
+| edgeGitopsVms.chartVersion | string | `"0.5.0"` |  |
 | global.clusterDomain | string | `"cluster.example.com"` |  |
 | global.clusterPlatform | string | `"AWS"` |  |
 | global.pattern | string | `"ramendr-starter-kit-hub"` |  |
