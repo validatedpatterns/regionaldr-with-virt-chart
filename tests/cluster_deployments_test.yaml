@@ -54,7 +54,7 @@ tests:
           value: ExternalSecret
       - equal:
           path: apiVersion
-          value: external-secrets.io/v1beta1
+          value: external-secrets.io/v1
 
   - it: BYOC renders primary ManagedCluster
     set:

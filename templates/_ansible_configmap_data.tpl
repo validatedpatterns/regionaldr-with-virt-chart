@@ -1,7 +1,14 @@
 {{- define "rdr.regionaldrAnsibleConfigMapData" -}}
-{{- range $path, $content := .Files.Glob "ansible/**" }}
+{{- $paths := list }}
+{{- range $path, $_ := .Files.Glob "ansible/**" }}
+{{- if not (hasPrefix "ansible/." $path) }}
+{{- $paths = append $paths $path }}
+{{- end }}
+{{- end }}
+{{- range $path := $paths | sortAlpha }}
   {{- $key := $path | trimPrefix "ansible/" | replace "/" "__" }}
+  {{- $body := $.Files.Get $path | toString | trimSuffix "\n" }}
   {{ $key }}: |
-{{ $content | toString | nindent 4 }}
+{{ $body | nindent 4 }}
 {{- end }}
 {{- end }}

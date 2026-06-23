@@ -182,6 +182,7 @@
 {{/* Namespace for ODF CA post-install Jobs (cluster-proxy-ca-bundle stays in openshift-config). */}}
 {{- define "rdr.clusterCaMgtNamespace" -}}
 {{- .Values.clusterCaMgt.namespace | default "cluster-ca-mgt" -}}
+{{- end -}}
 {{/* Stable checksum of packaged ansible/ (excludes dotfiles). Drives CM + Job drift on chart updates. */}}
 {{- define "rdr.ansibleConfigChecksum" -}}
 {{- $paths := list -}}
