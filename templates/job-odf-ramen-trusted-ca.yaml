@@ -4,7 +4,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: odf-ramen-trusted-ca
-  namespace: open-cluster-management
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
   labels:
     app.kubernetes.io/name: odf-ramen-trusted-ca
     app.kubernetes.io/component: ramen-hub-ca

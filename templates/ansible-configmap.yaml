@@ -12,15 +12,20 @@ metadata:
     argocd.argoproj.io/sync-options: {{ include "rdr.ansibleConfigMapArgoSyncOptions" . | quote }}
     regionaldr-with-virt/ansible-checksum: {{ include "rdr.ansibleConfigChecksum" . | quote }}
 data:
-{{- $paths := list }}
-{{- range $path, $_ := .Files.Glob "ansible/**" }}
-{{- if not (hasPrefix "ansible/." $path) }}
-{{- $paths = append $paths $path }}
-{{- end }}
-{{- end }}
-{{- range $path := $paths | sortAlpha }}
-  {{- $key := $path | trimPrefix "ansible/" | replace "/" "__" }}
-  {{- $body := $.Files.Get $path | toString | trimSuffix "\n" }}
-  {{ $key }}: |
-{{ $body | nindent 4 }}
+{{ include "rdr.regionaldrAnsibleConfigMapData" . }}
+{{- if eq "1" (include "rdr.odfPostInstallFixesEnabled" . | trim) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: regionaldr-ansible
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
+  labels:
+    app.kubernetes.io/name: regionaldr-ansible
+    app.kubernetes.io/component: ca-workloads
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: Prune=false
+data:
+{{ include "rdr.regionaldrAnsibleConfigMapData" . }}
 {{- end }}

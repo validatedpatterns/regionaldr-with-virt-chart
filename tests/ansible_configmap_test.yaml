@@ -3,6 +3,9 @@ templates:
   - ansible-configmap.yaml
 tests:
   - it: renders regionaldr-ansible at sync wave -1 with content checksum
+    documentSelector:
+      path: metadata.namespace
+      value: open-cluster-management
     asserts:
       - containsDocument:
           kind: ConfigMap

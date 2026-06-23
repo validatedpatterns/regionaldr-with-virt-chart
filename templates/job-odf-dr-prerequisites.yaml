@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: odf-dr-prerequisites-checker
-  namespace: open-cluster-management
+  namespace: {{ include "rdr.clusterCaMgtNamespace" . }}
   labels:
     app.kubernetes.io/name: odf-dr-prerequisites
     app.kubernetes.io/component: health-check

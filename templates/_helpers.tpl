@@ -179,6 +179,10 @@
 {{- if not (hasKey $odf "postInstallFixesEnabled") -}}1{{- else if index $odf "postInstallFixesEnabled" -}}1{{- else -}}0{{- end -}}
 {{- end -}}
 
+{{/* Namespace for ODF CA post-install Jobs (cluster-proxy-ca-bundle stays in openshift-config). */}}
+{{- define "rdr.clusterCaMgtNamespace" -}}
+{{- .Values.clusterCaMgt.namespace | default "cluster-ca-mgt" -}}
+{{- end -}}
 {{/* Stable checksum of packaged ansible/ (excludes dotfiles). Drives CM + Job drift on chart updates. */}}
 {{- define "rdr.ansibleConfigChecksum" -}}
 {{- $paths := list -}}

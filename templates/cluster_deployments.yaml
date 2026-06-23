@@ -13,7 +13,7 @@
 
 {{- if $.Values.byoc }}
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: {{ $cluster.name }}-auto-impport-kubeconfig
@@ -40,7 +40,7 @@ spec:
       mergePolicy: Replace
       type: Opaque
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: {{ $cluster.name }}-admin-kubeconfig
@@ -68,7 +68,7 @@ spec:
       type: Opaque
 {{- else }}
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: {{ $cluster.name }}-cluster-private-key
@@ -96,7 +96,7 @@ spec:
       type: Opaque
 
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: {{ $cluster.name }}-cluster-pull-secret
@@ -173,7 +173,7 @@ spec:
 
 {{- if $awsPlat }}
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: {{ $cluster.name }}-cluster-aws-creds
