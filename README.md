@@ -58,7 +58,7 @@ v0.1.0 - Initial release
 | drpc.preferredCluster | string | `"ocp-primary"` |  |
 | drpc.protectedNamespaces[0] | string | `"gitops-vms"` |  |
 | drpc.pvcSelector | object | `{}` |  |
-| drpc.vmStorageClassName | string | `"ocs-storagecluster-ceph-rbd-virtualization"` | Block PVC storage class for KubeVirt VMs. drcluster-validation (sync-wave 8) blocks DRPC until DRPolicy status is Validated=True and status.async.peerClasses include replicationID for this storage class. |
+| drpc.vmStorageClassName | string | `"ocs-storagecluster-ceph-rbd-virtualization"` | Block PVC storage class for KubeVirt VMs. drcluster-validation (sync-wave 8) blocks DRPC until DRPolicy status is Validated=True and status.async.peerClasses include replicationID. |
 | edgeGitopsVms.chartVersion | string | `"0.5.0"` |  |
 | global.clusterDomain | string | `"cluster.example.com"` |  |
 | global.clusterPlatform | string | `"AWS"` |  |
