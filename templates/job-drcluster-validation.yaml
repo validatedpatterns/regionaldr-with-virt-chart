@@ -4,7 +4,8 @@
 {{- range .drpolicies }}
 {{ $vm := coalesce (and .vmSupport "vm") "novm" }}
 {{ $autoName := printf "%s-%s" .interval $vm }}
-{{ $name := coalesce .name $autoName -}}
+{{ $name := coalesce .name $autoName }}
+{{ $vmPrereq := eq (include "rdr.drPolicyVmPrereqRequired" (dict "root" $ "drPolicyName" $name "vmSupport" .vmSupport)) "1" -}}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -26,6 +27,19 @@ spec:
       containers:
       - name: drcluster-validator
         image: {{ $.Values.ansible.containerImage }}
+        env:
+        - name: DRPOLICY_NAME
+          value: {{ $name | quote }}
+        - name: PRIMARY_CLUSTER
+          value: {{ include "rdr.primaryClusterName" $ | quote }}
+        - name: SECONDARY_CLUSTER
+          value: {{ include "rdr.secondaryClusterName" $ | quote }}
+        {{- if $vmPrereq }}
+        - name: VM_PREREQ_CHECK
+          value: "1"
+        - name: VM_STORAGE_CLASS
+          value: {{ include "rdr.vmStorageClassName" $ | quote }}
+        {{- end }}
         command:
         - /bin/bash
         - -c
@@ -33,11 +47,11 @@ spec:
           set -euo pipefail
 
           echo "Starting DRCluster validation check..."
+          {{- if $vmPrereq }}
+          echo "VM protection prerequisite enabled for DRPolicy $DRPOLICY_NAME (storage class: $VM_STORAGE_CLASS)"
+          echo "DRPC (sync-wave 10) will not apply until DRPolicy is Validated=True and peer classes have replicationID."
+          {{- end }}
 
-          # Configuration (clusterOverrides or regionalDR)
-          PRIMARY_CLUSTER="{{ include "rdr.primaryClusterName" $ }}"
-          SECONDARY_CLUSTER="{{ include "rdr.secondaryClusterName" $ }}"
-          DRPOLICY_NAME="{{ $name }}"
           MAX_ATTEMPTS=120  # 2 hours with 1 minute intervals
           SLEEP_INTERVAL=60  # 1 minute between checks
 
@@ -76,7 +90,74 @@ spec:
             return 0
           }
 
-          # Main check loop - keep retrying until both DRClusters are validated
+          check_drpolicy_validated() {
+            local policy="$1"
+
+            echo "Checking DRPolicy $policy validation status..."
+
+            if ! oc get drpolicy "$policy" &>/dev/null; then
+              echo "DRPolicy $policy does not exist yet"
+              return 1
+            fi
+
+            local validated_status=$(oc get drpolicy "$policy" -o jsonpath='{.status.conditions[?(@.type=="Validated")].status}' 2>/dev/null || echo "")
+
+            if [[ -z "$validated_status" ]]; then
+              echo "DRPolicy $policy: Validated condition not found yet"
+              return 1
+            fi
+
+            if [[ "$validated_status" != "True" ]]; then
+              echo "DRPolicy $policy: Not validated yet (status: $validated_status)"
+              local condition_message=$(oc get drpolicy "$policy" -o jsonpath='{.status.conditions[?(@.type=="Validated")].message}' 2>/dev/null || echo "")
+              if [[ -n "$condition_message" ]]; then
+                echo "  Message: $condition_message"
+              fi
+              return 1
+            fi
+
+            echo "✅ DRPolicy $policy is validated"
+            return 0
+          }
+
+          check_drpolicy_vm_peer_replication_id() {
+            local policy="$1"
+            local sc="$2"
+
+            echo "Checking DRPolicy $policy peer class replicationID for storage class $sc..."
+
+            local repl_ids
+            repl_ids=$(oc get drpolicy "$policy" -o jsonpath="{.status.async.peerClasses[?(@.storageClassName=='${sc}')].replicationID}" 2>/dev/null || echo "")
+
+            if [[ -z "$repl_ids" ]]; then
+              echo "DRPolicy $policy: no replicationID for storage class $sc in status.async.peerClasses"
+              return 1
+            fi
+
+            local found=
+            for id in $repl_ids; do
+              if [[ -n "$id" ]]; then
+                found=1
+                break
+              fi
+            done
+
+            if [[ -z "$found" ]]; then
+              echo "DRPolicy $policy: replicationID empty for storage class $sc"
+              return 1
+            fi
+
+            echo "✅ DRPolicy $policy has replicationID for virtualization storage class $sc"
+            return 0
+          }
+
+          check_drpolicy_vm_prereq() {
+            check_drpolicy_validated "$1" || return 1
+            check_drpolicy_vm_peer_replication_id "$1" "$2" || return 1
+            return 0
+          }
+
+          # Main check loop - keep retrying until prerequisites are met
           attempt=1
 
           while [[ $attempt -le $MAX_ATTEMPTS ]]; do
@@ -94,17 +175,23 @@ spec:
               all_validated=false
             fi
 
+            if [[ "${VM_PREREQ_CHECK:-}" == "1" ]]; then
+              if ! check_drpolicy_vm_prereq "$DRPOLICY_NAME" "$VM_STORAGE_CLASS"; then
+                all_validated=false
+              fi
+            fi
+
             if [[ "$all_validated" == "true" ]]; then
-              echo "🎉 Both DRClusters ($PRIMARY_CLUSTER and $SECONDARY_CLUSTER) are validated! Proceeding with DRPC deployment..."
+              echo "🎉 DR prerequisites met for DRPolicy $DRPOLICY_NAME. Proceeding with DRPC deployment..."
               exit 0
             else
-              echo "❌ Not all DRClusters are validated yet. Waiting $SLEEP_INTERVAL seconds before retry..."
+              echo "❌ DR prerequisites not met yet. Waiting $SLEEP_INTERVAL seconds before retry..."
               sleep $SLEEP_INTERVAL
               ((attempt++))
             fi
           done
 
-          echo "❌ DRCluster validation check failed after $MAX_ATTEMPTS attempts"
+          echo "❌ DR validation check failed after $MAX_ATTEMPTS attempts"
           echo ""
           echo "If the message was 'DRClusterConfig is not applied to cluster':"
           echo "  Ramen has not yet applied the DR config to that managed cluster (e.g. via ManifestWork)."
@@ -115,6 +202,13 @@ spec:
           echo "    oc get manifestwork -n $SECONDARY_CLUSTER"
           echo "  - Check Ramen controller logs on the hub if ManifestWorks are missing or failing."
           echo ""
+          if [[ "${VM_PREREQ_CHECK:-}" == "1" ]]; then
+          echo "VM protection prerequisite (do not protect VMs until these pass):"
+          echo "  oc get drpolicy $DRPOLICY_NAME -o jsonpath='{.status.conditions[?(@.type==\"Validated\")].status}'"
+          echo "  must return True, and status.async.peerClasses must include replicationID for $VM_STORAGE_CLASS."
+          echo "  Without replicationID, Ramen may route VM block PVCs to VolSync instead of async replication."
+          echo ""
+          fi
           echo "General checks:"
           echo "1. DRPolicy $DRPOLICY_NAME is created and properly configured"
           echo "2. Both clusters ($PRIMARY_CLUSTER and $SECONDARY_CLUSTER) are available and joined"
@@ -124,8 +218,12 @@ spec:
           echo "Current DRCluster status:"
           oc get drcluster "$PRIMARY_CLUSTER" -o yaml 2>/dev/null || echo "  Primary DRCluster not found or not accessible"
           oc get drcluster "$SECONDARY_CLUSTER" -o yaml 2>/dev/null || echo "  Secondary DRCluster not found or not accessible"
+          if [[ "${VM_PREREQ_CHECK:-}" == "1" ]]; then
+          echo ""
+          echo "Current DRPolicy status:"
+          oc get drpolicy "$DRPOLICY_NAME" -o yaml 2>/dev/null || echo "  DRPolicy not found or not accessible"
+          fi
           exit 1
       serviceAccountName: drcluster-validation-checker
 {{- end }}
 {{- end }}
-

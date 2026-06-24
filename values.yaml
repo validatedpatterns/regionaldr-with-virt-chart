@@ -96,6 +96,8 @@ drpc:
     - gitops-vms
   pvcSelector: {}
   preferredCluster: ocp-primary # default; override in values-cluster-names or values
+  # -- Block PVC storage class for KubeVirt VMs. drcluster-validation (sync-wave 8) blocks DRPC until DRPolicy status is Validated=True and status.async.peerClasses include replicationID for this storage class.
+  vmStorageClassName: ocs-storagecluster-ceph-rbd-virtualization
   # PostSync job drpc-health-check-argocd-sync-disable (ansible drpc_health_check role).
   healthCheck:
     maxAttempts: 30

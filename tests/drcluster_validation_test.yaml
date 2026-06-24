@@ -1,0 +1,30 @@
+suite: DRCluster validation job
+templates:
+  - job-drcluster-validation.yaml
+tests:
+  - it: enables VM DRPolicy prerequisite checks for the DRPC policy
+    documentSelector:
+      path: metadata.name
+      value: drcluster-validation-2m-vm
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "8"
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="VM_PREREQ_CHECK")].value
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="VM_STORAGE_CLASS")].value
+          value: ocs-storagecluster-ceph-rbd-virtualization
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: check_drpolicy_vm_prereq
+  - it: skips VM DRPolicy prerequisite checks for non-DRPC policies
+    documentSelector:
+      path: metadata.name
+      value: drcluster-validation-2m-novm
+    asserts:
+      - notFailedTemplate: {}
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="VM_PREREQ_CHECK")]
