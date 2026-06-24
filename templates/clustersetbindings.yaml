@@ -1,0 +1,14 @@
+{{- range .Values.regionalDR }}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: {{ .name }}
+  namespace: open-cluster-management
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    regional-dr-group: {{ .name }}
+spec:
+  clusterSet: {{ .name }}
+{{- end }}

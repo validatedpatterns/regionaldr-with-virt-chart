@@ -1,0 +1,25 @@
+suite: ManagedClusterSetBinding
+templates:
+  - clustersetbindings.yaml
+tests:
+  - it: binds each regionalDR cluster set into open-cluster-management
+    documentSelector:
+      path: metadata.name
+      value: resilient
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: kind
+          value: ManagedClusterSetBinding
+      - equal:
+          path: apiVersion
+          value: cluster.open-cluster-management.io/v1beta2
+      - equal:
+          path: metadata.namespace
+          value: open-cluster-management
+      - equal:
+          path: spec.clusterSet
+          value: resilient
+      - equal:
+          path: metadata.labels.regional-dr-group
+          value: resilient
