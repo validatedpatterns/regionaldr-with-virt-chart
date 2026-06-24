@@ -207,3 +207,22 @@
 {{- define "rdr.ansibleJobPodAnnotations" -}}
 checksum/regionaldr-ansible: {{ include "rdr.ansibleConfigChecksum" . | quote }}
 {{- end -}}
+
+{{/* DRPolicy name referenced by the chart DRPC (gitops-vm-protection). */}}
+{{- define "rdr.drpcDrPolicyName" -}}
+{{- index ($.Values.drpc | default dict) "drPolicyRef" "name" | default "2m-vm" -}}
+{{- end -}}
+
+{{/* Block storage class for KubeVirt VMs; must have replicationID in DRPolicy status before DRPC. */}}
+{{- define "rdr.vmStorageClassName" -}}
+{{- index ($.Values.drpc | default dict) "vmStorageClassName" | default "ocs-storagecluster-ceph-rbd-virtualization" -}}
+{{- end -}}
+
+{{/* 1 when drcluster-validation must wait for VM DRPolicy peer-class replicationID. */}}
+{{- define "rdr.drPolicyVmPrereqRequired" -}}
+{{- $root := .root -}}
+{{- $name := .drPolicyName -}}
+{{- $vmSupport := .vmSupport -}}
+{{- $drpcPolicy := include "rdr.drpcDrPolicyName" $root -}}
+{{- if and $vmSupport (eq $name $drpcPolicy) -}}1{{- else -}}0{{- end -}}
+{{- end -}}

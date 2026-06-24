@@ -7,6 +7,20 @@
 
 This chart provides a Regional DR configuration
 
+## VM protection prerequisites
+
+Do not protect VMs until the DRPolicy referenced by `drpc.drPolicyRef` is ready on the hub:
+
+1. The `Validated` condition is `True`:
+
+   ```bash
+   oc get drpolicy 2m-vm -o jsonpath='{.status.conditions[?(@.type=="Validated")].status}'
+   ```
+
+2. `status.async.peerClasses` includes a non-empty `replicationID` for the virtualization storage class (`drpc.vmStorageClassName`, default `ocs-storagecluster-ceph-rbd-virtualization`).
+
+The `drcluster-validation-<policy>` job (Argo CD sync-wave **8**) enforces these checks before the DRPlacementControl (sync-wave **10**) is applied. Without `replicationID` on the virtualization peer class, Ramen may route VM block PVCs to VolSync instead of async VolumeReplication.
+
 ## Notable changes
 
 v0.1.0 - Initial release
