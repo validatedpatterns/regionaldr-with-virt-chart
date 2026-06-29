@@ -1,6 +1,6 @@
 # regionaldr-with-virt
 
-![Version: 0.0.1](https://img.shields.io/badge/Version-0.0.1-informational?style=flat-square)
+![Version: 0.0.2](https://img.shields.io/badge/Version-0.0.2-informational?style=flat-square)
 
 A Helm chart to deploy RegionalDR configuration including virtualization
 
@@ -22,7 +22,8 @@ The `drcluster-validation-<policy>` job (Argo CD sync-wave **8**) enforces these
 
 ## Notable changes
 
-v0.1.0 - Initial release
+v0.0.2 - Update edge-gitops-vms version to 0.5.2 to support setting default virt class and direct PVC volumes
+v0.0.1 - Initial release
 
 <!-- prettier-ignore-start -->
 ## Values
@@ -59,7 +60,7 @@ v0.1.0 - Initial release
 | drpc.protectedNamespaces[0] | string | `"gitops-vms"` |  |
 | drpc.pvcSelector | object | `{}` |  |
 | drpc.vmStorageClassName | string | `"ocs-storagecluster-ceph-rbd-virtualization"` | Block PVC storage class for KubeVirt VMs. drcluster-validation (sync-wave 8) blocks DRPC until DRPolicy status is Validated=True and status.async.peerClasses include replicationID. |
-| edgeGitopsVms.chartVersion | string | `"0.5.0"` |  |
+| edgeGitopsVms.chartVersion | string | `"0.5.2"` |  |
 | global.clusterDomain | string | `"cluster.example.com"` |  |
 | global.clusterPlatform | string | `"AWS"` |  |
 | global.pattern | string | `"ramendr-starter-kit-hub"` |  |
