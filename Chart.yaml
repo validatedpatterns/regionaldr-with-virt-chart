@@ -4,3 +4,8 @@ keywords:
   - pattern
 name: regionaldr-with-virt
 version: 0.0.2
+dependencies:
+  - name: rdr-odf
+    version: "0.1.0"
+    repository: "file://charts/rdr-odf"
+    condition: odf.enabled
