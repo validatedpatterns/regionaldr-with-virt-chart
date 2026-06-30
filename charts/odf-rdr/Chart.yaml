@@ -1,9 +1,0 @@
-apiVersion: v2
-name: rdr-odf
-description: ODF/Ceph subchart for regionaldr-with-virt. Deploys Submariner, MirrorPeer,
-  ODF DR prerequisites checker, and Ramen trusted-CA job. Enabled via odf.enabled=true
-  in the parent chart values.
-version: 0.1.0
-keywords:
-  - odf
-  - pattern

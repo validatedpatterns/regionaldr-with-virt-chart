@@ -149,41 +149,19 @@
 {{- (index (.Values.drpc | default dict) "preferredCluster") | default (include "rdr.primaryClusterName" .) -}}
 {{- end -}}
 
-{{/* regionalDR[0].name (ClusterSet); Submariner broker namespace = name + "-broker" */}}
-{{- define "rdr.regionalDRClusterSetName" -}}
-{{- $dr := index .Values.regionalDR 0 -}}
-{{- $dr.name -}}
-{{- end -}}
-
-{{- define "rdr.submarinerBrokerNamespace" -}}
-{{ include "rdr.regionalDRClusterSetName" . }}-broker
-{{- end -}}
-
-{{/* global.clusterPlatform (e.g. AWS, BareMetal, GCP): AWS gates AWS-only chart pieces. Case-insensitive; default AWS preserves prior behavior. */}}
+{{/* global.clusterPlatform (e.g. AWS, BareMetal): AWS gates AWS-only chart pieces. Case-insensitive; default AWS. */}}
 {{- define "rdr.clusterPlatformAws" -}}
 {{- $g := .Values.global | default dict -}}
 {{- if eq "aws" (lower ($g.clusterPlatform | default "AWS" | toString)) -}}1{{- else -}}0{{- end -}}
 {{- end -}}
 
-{{/* Submariner EC2 SG tagger job + RBAC: AWS platform and submariner.sgTagJobEnabled true. */}}
-{{- define "rdr.submarinerSgTagJobEnabled" -}}
-{{- $sm := .Values.submariner | default dict -}}
-{{- $aws := eq "1" (include "rdr.clusterPlatformAws" . | trim) -}}
-{{- $want := and (hasKey $sm "sgTagJobEnabled") (index $sm "sgTagJobEnabled") -}}
-{{- if and $aws $want -}}1{{- else -}}0{{- end -}}
-{{- end -}}
-
-{{/* ODF post-install fixes: prerequisites checker + Ramen trusted CA jobs/RBAC. Default on if .Values.odf.postInstallFixesEnabled omitted. */}}
+{{/* ODF post-install automation enabled: gate for DRCluster / DRPolicy conditional blocks. */}}
 {{- define "rdr.odfPostInstallFixesEnabled" -}}
 {{- $odf := .Values.odf | default dict -}}
 {{- if not (hasKey $odf "postInstallFixesEnabled") -}}1{{- else if index $odf "postInstallFixesEnabled" -}}1{{- else -}}0{{- end -}}
 {{- end -}}
 
-{{/* Namespace for ODF CA post-install Jobs (cluster-proxy-ca-bundle stays in openshift-config). */}}
-{{- define "rdr.clusterCaMgtNamespace" -}}
-{{- .Values.clusterCaMgt.namespace | default "cluster-ca-mgt" -}}
-{{- end -}}
-{{/* Stable checksum of packaged ansible/ (excludes dotfiles). Drives CM + Job drift on chart updates. */}}
+{{/* Stable checksum of packaged ansible/ (excludes dotfiles). Drives Job annotation drift on chart updates. */}}
 {{- define "rdr.ansibleConfigChecksum" -}}
 {{- $paths := list -}}
 {{- range $path, $_ := .Files.Glob "ansible/**" -}}
@@ -196,11 +174,6 @@
 {{- $buf = printf "%s\n%s\n%s" $buf $path ($.Files.Get $path) -}}
 {{- end -}}
 {{- $buf | sha256sum -}}
-{{- end -}}
-
-{{/* Argo CD sync-options for regionaldr-ansible (see values ansible.configMapArgoSyncOptions). */}}
-{{- define "rdr.ansibleConfigMapArgoSyncOptions" -}}
-{{- .Values.ansible.configMapArgoSyncOptions | default "Prune=false,ServerSideApply=true" -}}
 {{- end -}}
 
 {{/* Pod template annotation: keep ansible Jobs in sync with regionaldr-ansible content. */}}
