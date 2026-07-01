@@ -200,11 +200,6 @@ checksum/regionaldr-ansible: {{ include "rdr.ansibleConfigChecksum" . | quote }}
 {{- if and $vmSupport (eq $name $drpcPolicy) -}}1{{- else -}}0{{- end -}}
 {{- end -}}
 
-{{/* Namespace for ODF CA post-install Jobs. */}}
-{{- define "rdr.clusterCaMgtNamespace" -}}
-{{- .Values.clusterCaMgt.namespace | default "cluster-ca-mgt" -}}
-{{- end -}}
-
 {{/* Argo CD sync-options for the ansible ConfigMap. */}}
 {{- define "rdr.ansibleConfigMapArgoSyncOptions" -}}
 {{- .Values.ansible.configMapArgoSyncOptions | default "Prune=false,ServerSideApply=true" -}}
