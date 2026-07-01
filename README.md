@@ -22,6 +22,7 @@ The `drcluster-validation-<policy>` job (Argo CD sync-wave **8**) enforces these
 
 ## Notable changes
 
+v0.0.3 - Remove all ODF templates and place them in a separate chart
 v0.0.2 - Update edge-gitops-vms version to 0.5.2 to support setting default virt class and direct PVC volumes
 v0.0.1 - Initial release
 
