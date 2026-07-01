@@ -91,4 +91,4 @@ spec:
           name: edge-gitops-vms-values
       - name: ansible
         configMap:
-          name: regionaldr-ansible
+          name: rdr-ansible
