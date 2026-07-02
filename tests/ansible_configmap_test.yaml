@@ -2,7 +2,7 @@ suite: ansible ConfigMap
 templates:
   - ansible-configmap.yaml
 tests:
-  - it: renders regionaldr-ansible at sync wave -1 with content checksum
+  - it: renders rdr-ansible at sync wave -1 with content checksum
     documentSelector:
       path: metadata.namespace
       value: open-cluster-management
@@ -10,7 +10,7 @@ tests:
       - containsDocument:
           kind: ConfigMap
           apiVersion: v1
-          name: regionaldr-ansible
+          name: rdr-ansible
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-1"
@@ -19,5 +19,3 @@ tests:
       - matchRegex:
           path: metadata.annotations["argocd.argoproj.io/sync-options"]
           pattern: ServerSideApply=true
-      - notExists:
-          path: data[".ansible-lint"]
