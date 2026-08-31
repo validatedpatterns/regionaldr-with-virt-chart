@@ -217,6 +217,45 @@ s3profile-{{ include "rdr.secondaryClusterName" . }}
 {{- end -}}
 {{- end -}}
 
+{{/* Namespace of the hub Ramen operator Deployment / ConfigMap. */}}
+{{- define "rdr.ramenOperatorNamespace" -}}
+{{- $ssp := ((.Values.drCluster | default dict).s3StoreProfiles | default dict) -}}
+{{- $ramen := ($ssp.ramen | default dict) -}}
+{{- $ramen.namespace | default "openshift-operators" -}}
+{{- end -}}
+
+{{/* Hub Ramen ConfigMap patch job + RBAC. Default off. */}}
+{{- define "rdr.updateRamenConfigEnabled" -}}
+{{- $ramen := .Values.ramen | default dict -}}
+{{- if index $ramen "updateRamenConfig" | default false -}}1{{- else -}}0{{- end -}}
+{{- end -}}
+
+{{/* Env value for ramenOpsNamespace. Default openshift-dr-ops; false or "" skips the yq edit. */}}
+{{- define "rdr.ramenOpsNamespacePatchEnvValue" -}}
+{{- $ramen := .Values.ramen | default dict -}}
+{{- if hasKey $ramen "opsNamespace" -}}
+{{- index $ramen "opsNamespace" | toString -}}
+{{- else -}}
+openshift-dr-ops
+{{- end -}}
+{{- end -}}
+
+{{/*
+Env value for drClusterOperator patch fields. Uses chart values.yaml defaults when the key is absent;
+explicit false or "" is passed through so the script can skip that yq edit.
+*/}}
+{{- define "rdr.drClusterOperatorPatchEnvValue" -}}
+{{- $root := index . "root" -}}
+{{- $cfg := index . "config" -}}
+{{- $key := index . "key" -}}
+{{- $defaults := ((index $root.Values.ramen | default dict).drClusterOperator | default dict) -}}
+{{- if hasKey $cfg $key -}}
+{{- index $cfg $key | toString -}}
+{{- else if hasKey $defaults $key -}}
+{{- index $defaults $key | toString -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Edge GitOps VMs deploy job + RBAC. Default on. */}}
 {{- define "rdr.edgeGitopsVmsEnabled" -}}
 {{- $egv := .Values.edgeGitopsVms | default dict -}}

@@ -1,51 +1,40 @@
-{{- if eq "1" (include "rdr.s3StoreProfilesCreate" . | trim) }}
+{{- if eq "1" (include "rdr.updateRamenConfigEnabled" . | trim) }}
 {{- $ssp := ((.Values.drCluster | default dict).s3StoreProfiles | default dict) -}}
 {{- $job := ($ssp.job | default dict) -}}
-{{- $wave := ($job.argoCDSyncWave | default "6") | quote -}}
+{{- $wave := ($job.argoCDSyncWave | default "6") | quote }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: ramen-s3-profiles
+  name: update-ramen-config
   namespace: open-cluster-management
   labels:
-    app.kubernetes.io/name: ramen-s3-profiles
-    app.kubernetes.io/component: s3-store-profiles
+    app.kubernetes.io/name: update-ramen-config
   annotations:
     argocd.argoproj.io/sync-wave: {{ $wave }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: ramen-s3-profiles
+  name: update-ramen-config
   labels:
-    app.kubernetes.io/name: ramen-s3-profiles
-    app.kubernetes.io/component: s3-store-profiles
+    app.kubernetes.io/name: update-ramen-config
   annotations:
     argocd.argoproj.io/sync-wave: {{ $wave }}
 rules:
-# Hub Ramen ConfigMap upsert
+# Hub Ramen ConfigMap patch
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get", "list", "watch", "update", "patch"]
-# Copy credentials Secret into Ramen namespace
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
-# Discover S4 (or other) S3 Route host
-- apiGroups: ["route.openshift.io"]
-  resources: ["routes"]
-  verbs: ["get", "list", "watch"]
 ---
 # Bounce ramen-hub-operator pods after a real ConfigMap change. OLM reverts
 # Deployment rollout-restart; delete the pods instead.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: ramen-s3-profiles-hub-operator
+  name: update-ramen-config-hub-operator
   namespace: {{ include "rdr.ramenOperatorNamespace" . }}
   labels:
-    app.kubernetes.io/name: ramen-s3-profiles
-    app.kubernetes.io/component: s3-store-profiles
+    app.kubernetes.io/name: update-ramen-config
   annotations:
     argocd.argoproj.io/sync-wave: {{ $wave }}
 rules:
@@ -56,37 +45,35 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: ramen-s3-profiles-hub-operator
+  name: update-ramen-config-hub-operator
   namespace: {{ include "rdr.ramenOperatorNamespace" . }}
   labels:
-    app.kubernetes.io/name: ramen-s3-profiles
-    app.kubernetes.io/component: s3-store-profiles
+    app.kubernetes.io/name: update-ramen-config
   annotations:
     argocd.argoproj.io/sync-wave: {{ $wave }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: ramen-s3-profiles-hub-operator
+  name: update-ramen-config-hub-operator
 subjects:
 - kind: ServiceAccount
-  name: ramen-s3-profiles
+  name: update-ramen-config
   namespace: open-cluster-management
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: ramen-s3-profiles
+  name: update-ramen-config
   labels:
-    app.kubernetes.io/name: ramen-s3-profiles
-    app.kubernetes.io/component: s3-store-profiles
+    app.kubernetes.io/name: update-ramen-config
   annotations:
     argocd.argoproj.io/sync-wave: {{ $wave }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: ramen-s3-profiles
+  name: update-ramen-config
 subjects:
 - kind: ServiceAccount
-  name: ramen-s3-profiles
+  name: update-ramen-config
   namespace: open-cluster-management
 {{- end }}

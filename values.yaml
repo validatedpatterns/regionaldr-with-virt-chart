@@ -40,7 +40,7 @@ drCluster:
   # Does not set caCertificates — opp-policy s3CaInjector owns that.
   s3StoreProfiles:
     ramen:
-      # -- Namespace of the hub Ramen operator ConfigMap.
+      # -- Namespace of the hub Ramen operator ConfigMap and operator pods.
       namespace: openshift-operators
       # -- Hub Ramen ConfigMap name.
       configMapName: ramen-hub-operator-config
@@ -97,6 +97,28 @@ main:
 # infrastructureEnabled: DRPolicy, DRCluster validation, and chart-owned DRClusters only
 # (useful when resourcesEnabled is false, e.g. partner CSI without DRPC/VMs).
 ramen:
+  # -- When true, run the update-ramen-config Job and RBAC to patch hub Ramen ConfigMap (restarts hub operator only if the ConfigMap changed).
+  updateRamenConfig: false
+  # -- drClusterOperator fields written into ramen_manager_config.yaml when updateRamenConfig is true.
+  # Set a field to false or "" to leave that key unchanged in the hub ConfigMap.
+  drClusterOperator:
+    # -- OLM catalog source for the DR cluster operator.
+    catalogSourceName: rhdr-catalog
+    # -- Namespace of the OLM catalog source.
+    catalogSourceNamespaceName: openshift-marketplace
+    # -- Operator package name in the catalog.
+    packageName: rhdr-cluster-operator
+    # -- Operator subscription channel.
+    channelName: stable-4.22
+    # -- Target namespace for the DR cluster operator.
+    namespaceName: openshift-dr-system
+    # -- startingCSV on the spoke Subscription. Empty falls back to ramen-dr-cluster-operator.v0.0.1
+    # (not derived from packageName). Must exist in the catalog package/channel.
+    clusterServiceVersionName: rhdr-cluster-operator.v4.22.0-86.stable
+  # -- Hub RamenConfig ramenOpsNamespace (spoke Namespace for unmanaged-app/DRPC operands).
+  # Must differ from drClusterOperator.namespaceName: ACM rejects two v1.Namespace
+  # manifests for the same name in ramen-dr-cluster ManifestWork. Set false or "" to skip.
+  opsNamespace: openshift-dr-ops
   # -- When false, skip DRPC, Placement, and DRPC health job. DRPolicy/validation/DRClusters
   # still render if infrastructureEnabled is true.
   resourcesEnabled: true

@@ -1,6 +1,6 @@
 # regionaldr-with-virt
 
-![Version: 0.1.2](https://img.shields.io/badge/Version-0.1.2-informational?style=flat-square)
+![Version: 0.1.3](https://img.shields.io/badge/Version-0.1.3-informational?style=flat-square)
 
 A Helm chart to deploy RegionalDR configuration including virtualization
 
@@ -20,7 +20,29 @@ Do not protect VMs until the DRPolicy referenced by `drpc.drPolicyRef` is ready 
 
 The `drcluster-validation-<policy>` job (Argo CD sync-wave **8**) enforces these checks before the DRPlacementControl (sync-wave **10**) is applied. Without `replicationID` on the virtualization peer class, Ramen may route VM block PVCs to VolSync instead of async VolumeReplication.
 
-When chart-owned DRClusters are created (`drCluster.create` or partner `ramen.infrastructureEnabled` with `resourcesEnabled: false`), an Argo CD **Sync** hook Job at wave **6** upserts matching hub top-level `s3StoreProfiles` (primary + secondary only) into `ramen-hub-operator-config` (defaults: hub **vp-s4-storage** credentials and Route) **before** DRClusters (wave 7) and DRPolicy validation (wave 8). **opp-policy** still injects `caCertificates` afterward.
+When chart-owned DRClusters are created (`drCluster.create` or partner `ramen.infrastructureEnabled` with `resourcesEnabled: false`), an Argo CD **Sync** hook Job at wave **6** upserts matching hub top-level `s3StoreProfiles` (primary + secondary only) into `ramen-hub-operator-config` (defaults: hub **vp-s4-storage** credentials and Route) **before** DRClusters (wave 7) and DRPolicy validation (wave 8). **opp-policy** still injects `caCertificates` afterward. If the ConfigMap YAML actually changed, the Job deletes hub operator pods (`app=ramen-hub` in `drCluster.s3StoreProfiles.ramen.namespace`) so the operator reloads config; OLM reverts `rollout restart`, so the Job does not use it. Unchanged ConfigMaps skip the bounce.
+
+### Optional hub Ramen `drClusterOperator` patch
+
+When `ramen.updateRamenConfig` is **true** (default **false**), a separate Sync hook Job at wave **6** patches `drClusterOperator` fields and `ramenOpsNamespace` in the hub Ramen ConfigMap (`drCluster.s3StoreProfiles.ramen.configMapName`, default `ramen-hub-operator-config`). The Job and its RBAC are omitted unless this gate is enabled. Like the s3 profiles Job, it restarts hub operator pods only when the patched ConfigMap differs from what was already on the hub.
+
+Values under `ramen.drClusterOperator` and `ramen.opsNamespace` parameterize each `yq` edit applied to `ramen_manager_config.yaml`:
+
+| Value                        | Patches                                        |
+| ---------------------------- | ---------------------------------------------- |
+| `catalogSourceName`          | `drClusterOperator.catalogSourceName`          |
+| `catalogSourceNamespaceName` | `drClusterOperator.catalogSourceNamespaceName` |
+| `packageName`                | `drClusterOperator.packageName`                |
+| `channelName`                | `drClusterOperator.channelName`                |
+| `namespaceName`              | `drClusterOperator.namespaceName`              |
+| `clusterServiceVersionName`  | `drClusterOperator.clusterServiceVersionName`  |
+| `ramen.opsNamespace`         | `ramenOpsNamespace`                            |
+
+`ramen.opsNamespace` (default `openshift-dr-ops`) **must** differ from `ramen.drClusterOperator.namespaceName` (default `openshift-dr-system`). If they match, ACM denies `ramen-dr-cluster` ManifestWork (`duplicate manifest for resource ... v1.Namespace`). The pattern already creates both namespaces (`openshift-dr-system` and `openshift-dr-ops`).
+
+If `clusterServiceVersionName` is unset, the hub operator defaults spoke `startingCSV` to `ramen-dr-cluster-operator.v0.0.1` (not derived from `packageName`). That CSV is not in `rhdr-catalog`, so OLM cannot resolve `rhdr-cluster-operator`. Set `ramen.drClusterOperator.clusterServiceVersionName` to a CSV that exists in that package/channel (default `rhdr-cluster-operator.v4.22.0-86.stable`). After a CSV change, recreate `ramen-dr-cluster` ManifestWorks if the hub operator reused the existing Subscription (it keeps `startingCSV` when package/channel/catalog are unchanged).
+
+Set any field to `false` or `""` to skip that edit and leave the existing hub value unchanged. Job timing and Ramen ConfigMap location reuse `drCluster.s3StoreProfiles.job` and `drCluster.s3StoreProfiles.ramen`.
 
 PostSync settlement: `drpc-health-check` (wave **12**, only when `ramen.resourcesEnabled`) waits for DRPC health.
 When `argocd.disableAutomatedSync` is true (default), `argocd-sync-disable` (wave **13**) then removes Application automated sync so the regional-dr app stops reconciling after things settle — including `drpartner-s4` (`resourcesEnabled: false`) and `drpartner-minimal` (both `resourcesEnabled` and `infrastructureEnabled` false).
@@ -29,6 +51,7 @@ Set `argocd.disableAutomatedSync: false` to leave autosync on.
 
 ## Notable changes
 
+v0.1.3 - Add optional `ramen.updateRamenConfig` gate (default false) with Sync hook Job and RBAC to patch hub Ramen `drClusterOperator` (including `clusterServiceVersionName`) and `ramenOpsNamespace`; ConfigMap editor Jobs restart hub operator pods only when the ConfigMap changed (delete `app=ramen-hub` pods; do not `rollout restart`); set individual fields to `false` or `""` to skip that `yq` edit
 v0.1.2 - Parameterize DRPC placement to use values specified.
 v0.1.1 - Fix argocd-sync-disable / drpc-health Application CR namespace: use `pattern`-`clusterGroup.name` (not spoke `main.clusterGroupName`, and not `$ARGOCD_APP_NAMESPACE` / `global.namespace` which is destination `regional-dr`); add hub Application ignoreDifferences for regional-dr syncPolicy.automated so disable sticks under parent selfHeal; fail the Job when the Application is missing instead of soft-skipping; gate sync-disable with `argocd.disableAutomatedSync` (default true)
 v0.1.0 - Replace `odf.postInstallFixesEnabled` / `odf.drCluster` with `drCluster.create` and default S3 profile names (`s3profile-` plus cluster name); add `ramen.infrastructureEnabled` for DRPolicy/validation/chart DRClusters when `resourcesEnabled` is false; upsert hub Ramen `s3StoreProfiles` when chart-owned DRClusters are created (values-driven, hub S4 defaults; opp-policy still owns `caCertificates`); Sync-hook (not PostSync) so profiles exist before DRPolicy validation; split DRPC health check from Argo CD sync-disable (sync-disable always runs after settlement)
@@ -73,7 +96,7 @@ v0.0.1 - Initial release
 | drCluster.s3StoreProfiles.primary.s3Bucket | string | `""` | Bucket for the primary profile. Empty defaults to the primary profile name. |
 | drCluster.s3StoreProfiles.ramen.configKey | string | `"ramen_manager_config.yaml"` | Key holding RamenConfig YAML. |
 | drCluster.s3StoreProfiles.ramen.configMapName | string | `"ramen-hub-operator-config"` | Hub Ramen ConfigMap name. |
-| drCluster.s3StoreProfiles.ramen.namespace | string | `"openshift-operators"` | Namespace of the hub Ramen operator ConfigMap. |
+| drCluster.s3StoreProfiles.ramen.namespace | string | `"openshift-operators"` | Namespace of the hub Ramen operator ConfigMap and operator pods. |
 | drCluster.s3StoreProfiles.s3CompatibleEndpoint | string | `""` | S3 endpoint URL. Empty discovers from endpointSource Route. |
 | drCluster.s3StoreProfiles.s3Region | string | `"us-east-1"` | S3 region (required by Ramen AWS SDK). |
 | drCluster.s3StoreProfiles.s3SecretRef.name | string | `"ramen-s3-credentials"` | Secret Ramen profiles reference (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). |
@@ -109,8 +132,17 @@ v0.0.1 - Initial release
 | odfRamenTrustedCa.pollInterval | int | `15` |  |
 | odfRamenTrustedCa.ramenS3WaitSeconds | int | `3600` |  |
 | odfRamenTrustedCa.trustedCaWaitSeconds | int | `3600` |  |
+| ramen.drClusterOperator | object | `{"catalogSourceName":"rhdr-catalog","catalogSourceNamespaceName":"openshift-marketplace","channelName":"stable-4.22","clusterServiceVersionName":"rhdr-cluster-operator.v4.22.0-86.stable","namespaceName":"openshift-dr-system","packageName":"rhdr-cluster-operator"}` | drClusterOperator fields written into ramen_manager_config.yaml when updateRamenConfig is true. Set a field to false or "" to leave that key unchanged in the hub ConfigMap. |
+| ramen.drClusterOperator.catalogSourceName | string | `"rhdr-catalog"` | OLM catalog source for the DR cluster operator. |
+| ramen.drClusterOperator.catalogSourceNamespaceName | string | `"openshift-marketplace"` | Namespace of the OLM catalog source. |
+| ramen.drClusterOperator.channelName | string | `"stable-4.22"` | Operator subscription channel. |
+| ramen.drClusterOperator.clusterServiceVersionName | string | `"rhdr-cluster-operator.v4.22.0-86.stable"` | startingCSV on the spoke Subscription. Empty falls back to ramen-dr-cluster-operator.v0.0.1 (not derived from packageName). Must exist in the catalog package/channel. |
+| ramen.drClusterOperator.namespaceName | string | `"openshift-dr-system"` | Target namespace for the DR cluster operator. |
+| ramen.drClusterOperator.packageName | string | `"rhdr-cluster-operator"` | Operator package name in the catalog. |
 | ramen.infrastructureEnabled | bool | `false` | When true (or when resourcesEnabled is true), render DRPolicy, DRCluster validation, and chart-owned DRClusters (see also drCluster.create). |
+| ramen.opsNamespace | string | `"openshift-dr-ops"` | Hub RamenConfig ramenOpsNamespace (spoke Namespace for unmanaged-app/DRPC operands). Must differ from drClusterOperator.namespaceName: ACM rejects two v1.Namespace manifests for the same name in ramen-dr-cluster ManifestWork. Set false or "" to skip. |
 | ramen.resourcesEnabled | bool | `true` | When false, skip DRPC, Placement, and DRPC health job. DRPolicy/validation/DRClusters still render if infrastructureEnabled is true. |
+| ramen.updateRamenConfig | bool | `false` | When true, run the update-ramen-config Job and RBAC to patch hub Ramen ConfigMap (restarts hub operator only if the ConfigMap changed). |
 | redis.external.address | string | `"rhel9-redis-001.gitops-vms.svc.cluster.local"` |  |
 | redis.external.enabled | bool | `false` |  |
 | regionalDR[0].clusters.primary.clusterGroup | string | `"resilient"` |  |
