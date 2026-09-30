@@ -320,5 +320,9 @@ spec.destination.namespace (e.g. regional-dr), not metadata.namespace of the
 Application (e.g. ramendr-starter-kit-drpartner-s4).
 */}}
 {{- define "rdr.argocdApplicationNamespace" -}}
+{{- if .Values.global.singleArgoCD -}}
+{{- .Values.global.vpArgoNamespace | default "vp-gitops" -}}
+{{- else -}}
 {{- printf "%s-%s" (.Values.global.pattern | default "ramendr-starter-kit") ((index (.Values.clusterGroup | default dict) "name") | default "hub") -}}
+{{- end -}}
 {{- end -}}
