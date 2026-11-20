@@ -130,7 +130,7 @@ ramen:
 edgeGitopsVms:
   # -- When false, skip the edge-gitops-vms deploy Job and its RBAC/ConfigMap.
   enabled: true
-  chartVersion: "0.5.2"
+  chartVersion: "0.5.4"
 
 # Argo CD Application control after chart settlement.
 argocd:
@@ -200,7 +200,13 @@ drpc:
     namespace: openshift-dr-ops
   protectedNamespaces:
     - gitops-vms
-  pvcSelector: {}
+  # -- Exclude CDI priming/scratch PVCs (labeled by CDI) so they are not enrolled in VGR.
+  pvcSelector:
+    matchExpressions:
+      - key: velero.io/exclude-from-backup
+        operator: NotIn
+        values:
+          - "true"
   preferredCluster: ocp-primary # default; override in values-cluster-names or values
   # -- Block PVC storage class for KubeVirt VMs. drcluster-validation (sync-wave 8) blocks DRPC until
   # DRPolicy status is Validated=True and status.async.peerClasses include replicationID.

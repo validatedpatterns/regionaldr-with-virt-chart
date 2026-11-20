@@ -73,7 +73,7 @@ spec:
         - name: SECONDARY_CLUSTER
           value: {{ include "rdr.secondaryClusterName" . | quote }}
         - name: HELM_CHART_VERSION
-          value: {{ index (index .Values "edgeGitopsVms" | default dict) "chartVersion" | default "0.2.10" | quote }}
+          value: {{ index (index .Values "edgeGitopsVms" | default dict) "chartVersion" | default "0.5.4" | quote }}
         - name: BOUTIQUE_DEPLOY
           value: {{ if $b.deploy }}"true"{{ else }}"false"{{ end }}
         - name: BOUTIQUE_NAMESPACE

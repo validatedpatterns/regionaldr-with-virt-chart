@@ -51,7 +51,7 @@ Set `argocd.disableAutomatedSync: false` to leave autosync on.
 
 ## Notable changes
 
-v0.1.5 - Add `drplacementcontrol.ramendr.openshift.io/resync-on-primary` annotation to DRPC to force resync on primary cluster.
+v0.1.5 - Add `drplacementcontrol.ramendr.openshift.io/resync-on-primary` annotation to DRPC to force resync on primary cluster. Update edge-gitops-vms chart version to 0.5.4, add PVC selector to exclude CDI priming/scratch PVCs from VGR.
 v0.1.4 - Add helper function to fix the `argocd-sync-disable` job in cases with single ArgoCD instances.
 v0.1.3 - Add optional `ramen.updateRamenConfig` gate (default false) with Sync hook Job and RBAC to patch hub Ramen `drClusterOperator` (including `clusterServiceVersionName`) and `ramenOpsNamespace`; ConfigMap editor Jobs restart hub operator pods only when the ConfigMap changed (delete `app=ramen-hub` pods; do not `rollout restart`); set individual fields to `false` or `""` to skip that `yq` edit
 v0.1.2 - Parameterize DRPC placement to use values specified.
@@ -118,9 +118,9 @@ v0.0.1 - Initial release
 | drpc.placementRef.namespace | string | `"openshift-dr-ops"` |  |
 | drpc.preferredCluster | string | `"ocp-primary"` |  |
 | drpc.protectedNamespaces[0] | string | `"gitops-vms"` |  |
-| drpc.pvcSelector | object | `{}` |  |
+| drpc.pvcSelector | object | `{"matchExpressions":[{"key":"velero.io/exclude-from-backup","operator":"NotIn","values":["true"]}]}` | Exclude CDI priming/scratch PVCs (labeled by CDI) so they are not enrolled in VGR. |
 | drpc.vmStorageClassName | string | `"ocs-storagecluster-ceph-rbd-virtualization"` | Block PVC storage class for KubeVirt VMs. drcluster-validation (sync-wave 8) blocks DRPC until DRPolicy status is Validated=True and status.async.peerClasses include replicationID. |
-| edgeGitopsVms.chartVersion | string | `"0.5.2"` |  |
+| edgeGitopsVms.chartVersion | string | `"0.5.4"` |  |
 | edgeGitopsVms.enabled | bool | `true` | When false, skip the edge-gitops-vms deploy Job and its RBAC/ConfigMap. |
 | global.clusterDomain | string | `"cluster.example.com"` |  |
 | global.clusterPlatform | string | `"AWS"` |  |

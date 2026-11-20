@@ -42,6 +42,15 @@ tests:
       - equal:
           path: spec.kubeObjectProtection.captureInterval
           value: 2m0s
+      - equal:
+          path: spec.pvcSelector.matchExpressions[0].key
+          value: velero.io/exclude-from-backup
+      - equal:
+          path: spec.pvcSelector.matchExpressions[0].operator
+          value: NotIn
+      - equal:
+          path: spec.pvcSelector.matchExpressions[0].values[0]
+          value: "true"
 
   - it: defaults render Placement matching DRPC placementRef
     templates:
